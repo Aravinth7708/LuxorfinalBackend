@@ -10,7 +10,7 @@ const villaSchema = new mongoose.Schema({
   guests: { type: Number },
   bedrooms: { type: Number },
   bathrooms: { type: Number },
-  // Add more fields as needed
+ 
 }, { collection: 'Villas' });
 
 module.exports = mongoose.model('Villa', villaSchema);

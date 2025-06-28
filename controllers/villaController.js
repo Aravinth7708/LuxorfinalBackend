@@ -15,8 +15,18 @@ exports.addVillas = async (req, res) => {
 exports.getAllVillas = async (req, res) => {
   try {
     const villas = await Villa.find();
-    res.json(villas); // Send just the villas array
+    
+    // For debugging - log the first villa's image format
+    if (villas.length > 0 && Array.isArray(villas[0].images) && villas[0].images.length > 0) {
+      const firstImage = villas[0].images[0];
+      console.log('First villa image type:', typeof firstImage);
+      console.log('First image starts with:', typeof firstImage === 'string' ? 
+        firstImage.substring(0, Math.min(50, firstImage.length)) + '...' : 'Not a string');
+    }
+    
+    res.json(villas); // Send the complete villa data with images intact
   } catch (err) {
+    console.error('Error fetching villas:', err);
     res.status(500).json({ error: err.message });
   }
 };

@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { syncUser } = require('../controllers/userController');
+const userController = require('../controllers/userController');
 
-router.post('/sync', syncUser);
+router.post('/sync', userController.syncUser);
+router.post('/register', userController.registerUser);
+router.post('/login', userController.loginUser);
+router.get('/profile', userController.getUserProfile);
 
 module.exports = router;
