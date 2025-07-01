@@ -28,15 +28,10 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: ['http://localhost:5173', 'https://luxor-home-stays.vercel.app', 'https://luxorhomestays.com'],
   credentials: true,
-  exposedHeaders: ['Content-Range', 'X-Total-Count'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
-  maxAge: 86400,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+
 }));
 
-app.use(express.json({ limit: '2mb' })); // Increase JSON payload limit
+app.use(express.json()); // Increase JSON payload limit
 
 // Root health check endpoint
 app.get('/', (req, res) => {
