@@ -11,22 +11,47 @@ exports.addVillas = async (req, res) => {
   }
 };
 
-// Get all villas
+// Update villa details
+exports.updateVilla = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedData = req.body;
+    
+    console.log("[VILLA] Updating villa:", id);
+    console.log("[VILLA] Update data:", updatedData);
+    
+    const villa = await Villa.findByIdAndUpdate(id, updatedData, { new: true });
+    
+    if (!villa) {
+      return res.status(404).json({ error: 'Villa not found' });
+    }
+    
+    res.json(villa);
+  } catch (err) {
+    console.error("[VILLA] Update error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get all villas with expanded details
 exports.getAllVillas = async (req, res) => {
   try {
     const villas = await Villa.find();
     
-    // For debugging - log the first villa's image format
-    if (villas.length > 0 && Array.isArray(villas[0].images) && villas[0].images.length > 0) {
-      const firstImage = villas[0].images[0];
-      console.log('First villa image type:', typeof firstImage);
-      console.log('First image starts with:', typeof firstImage === 'string' ? 
-        firstImage.substring(0, Math.min(50, firstImage.length)) + '...' : 'Not a string');
-    }
+    // Add display prices for weekday/weekend if they exist
+    const enhancedVillas = villas.map(villa => {
+      const villaObj = villa.toObject();
+      
+      // Set default prices if not present
+      if (!villaObj.weekdayPrice) villaObj.weekdayPrice = villaObj.price;
+      if (!villaObj.weekendPrice) villaObj.weekendPrice = Math.round(villaObj.price * 1.5);
+      
+      return villaObj;
+    });
     
-    res.json(villas); // Send the complete villa data with images intact
+    res.json(enhancedVillas);
   } catch (err) {
-    console.error('Error fetching villas:', err);
+    console.error("[VILLA] Error getting villas:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -47,6 +72,27 @@ exports.searchVillas = async (req, res) => {
     const villas = await Villa.find(filter);
     res.json(villas);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get villa by ID
+exports.getVillaById = async (req, res) => {
+  try {
+    const villaId = req.params.id;
+    console.log(`[VILLA] Fetching villa with ID: ${villaId}`);
+    
+    const villa = await Villa.findById(villaId);
+    
+    if (!villa) {
+      console.log(`[VILLA] Villa not found with ID: ${villaId}`);
+      return res.status(404).json({ error: 'Villa not found' });
+    }
+    
+    console.log(`[VILLA] Found villa: ${villa.name}`);
+    res.json(villa);
+  } catch (err) {
+    console.error('Error fetching villa by ID:', err);
     res.status(500).json({ error: err.message });
   }
 };
