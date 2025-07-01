@@ -1,9 +1,10 @@
 import Booking from '../models/Booking.js';
 import Villa from '../models/Villa.js';
 import nodemailer from 'nodemailer';
+import Newsletter from '../models/Newsletter.js';
 
 
-exports.subscribe = async (req, res) => {
+export const subscribe = async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
@@ -73,3 +74,58 @@ async function sendNewsletterEmail(email, isNew) {
 
   await transporter.sendMail(mailOptions);
 }
+
+// Unsubscribe handler (soft delete / mark expired)
+export const unsubscribe = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    const subscription = await Newsletter.findOne({ email });
+    if (!subscription) return res.status(404).json({ error: 'Subscription not found' });
+    subscription.expiresAt = new Date();
+    await subscription.save();
+    return res.json({ success: true, message: 'Unsubscribed successfully' });
+  } catch (err) {
+    console.error('Error in unsubscribe:', err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// Admin: get all subscribers
+export const getAllSubscribers = async (req, res) => {
+  try {
+    const subscribers = await Newsletter.find().select('-__v');
+    return res.json({ success: true, subscribers });
+  } catch (err) {
+    console.error('Error in getAllSubscribers:', err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// Admin: send a newsletter email to subscribers (basic example)
+export const sendNewsletter = async (req, res) => {
+  try {
+    const { subject, html } = req.body;
+    if (!subject || !html) return res.status(400).json({ error: 'Subject and html required' });
+    const subscribers = await Newsletter.find({ expiresAt: { $gt: new Date() } });
+    const emails = subscribers.map(s => s.email);
+    if (!emails.length) return res.status(400).json({ error: 'No active subscribers' });
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.gmail, pass: process.env.pass }
+    });
+
+    await transporter.sendMail({
+      from: process.env.gmail,
+      to: emails,
+      subject,
+      html
+    });
+
+    return res.json({ success: true, message: 'Newsletter sent', recipients: emails.length });
+  } catch (err) {
+    console.error('Error in sendNewsletter:', err);
+    return res.status(500).json({ error: err.message });
+  }
+};

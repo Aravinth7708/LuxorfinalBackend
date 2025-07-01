@@ -70,25 +70,10 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// Get user profile
-export const getUserProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId).select('-password');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json(user);
-  } catch (err) {
-    console.error('Get profile error:', err);
-    res.status(500).json({ error: err.message });
-  }
-};
-
 // Sync user data (for clerk auth)
 export const syncUser = async (req, res) => {
   try {
-    
+    const { email, password } = req.body;
     
     // Find user
     const user = await User.findOne({ email });
@@ -128,10 +113,10 @@ export const syncUser = async (req, res) => {
     console.error("Error in loginUser:", err);
     res.status(500).json({ error: err.message });
   }
-}
+};
 
 // Get user profile
-exports.getUserProfile = async (req, res) => {
+export const getUserProfile = async (req, res) => {
   try {
     // Verify token and get userId from it
     const authHeader = req.headers.authorization;
@@ -172,3 +157,4 @@ exports.getUserProfile = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+       

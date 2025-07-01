@@ -2,7 +2,7 @@
 import nodemailer from "nodemailer"
 
 // Handle contact form submissions
-exports.submitContactForm = async (req, res) => {
+export const submitContactForm = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
     

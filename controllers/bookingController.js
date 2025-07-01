@@ -3,7 +3,7 @@ import Villa from '../models/Villa.js';
 import nodemailer from 'nodemailer';
 
 // import Ramwater from "./img/Rw"
-exports.createBooking = async (req, res) => {
+export const createBooking = async (req, res) => {
   try {
     console.log("[BOOKING] Received booking request:", req.body);
 
@@ -440,7 +440,7 @@ async function sendBookingEmail(email, booking, villa) {
 }
 
 // Search bookings that overlap with a date range
-exports.searchBookings = async (req, res) => {
+export const searchBookings = async (req, res) => {
   try {
     const { checkIn, checkOut } = req.query;
     if (!checkIn || !checkOut) {
@@ -462,7 +462,7 @@ exports.searchBookings = async (req, res) => {
 };
 
 // Updated method to get user bookings - fetch by userId when email isn't available
-exports.getUserBookings = async (req, res) => {
+export const getUserBookings = async (req, res) => {
   try {
     // Detailed logging for debugging
     console.log("[BOOKING] Fetching user bookings with auth:", {
@@ -497,11 +497,11 @@ exports.getUserBookings = async (req, res) => {
       console.log(`[BOOKING] Email not found in token, looking up user with ID: ${userId}`);
       
       // Import User model
-      const User = require('../models/User');
+      const User = await import('../models/User.js');
       
       try {
         // Find user by ID
-        const user = await User.findById(userId);
+        const user = await User.default.findById(userId);
         
         if (!user) {
           console.error(`[BOOKING] User not found for ID: ${userId}`);
@@ -544,7 +544,7 @@ exports.getUserBookings = async (req, res) => {
 };
 
 // Cancel a booking
-exports.cancelBooking = async (req, res) => {
+export const cancelBooking = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -620,7 +620,7 @@ exports.cancelBooking = async (req, res) => {
 };
 
 // Get booking by ID
-exports.getBookingById = async (req, res) => {
+export const getBookingById = async (req, res) => {
   try {
     const { id } = req.params;
     console.log("[BOOKING] Fetching booking by ID:", id);
