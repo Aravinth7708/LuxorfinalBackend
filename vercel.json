@@ -1,36 +1,15 @@
 {
   "version": 2,
-  "buildCommand": "npm install",
-  "outputDirectory": ".",
   "builds": [
     {
-      "src": "api/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 60,
-        "includeFiles": [
-          "routes/**",
-          "models/**",
-          "controllers/**",
-          "middleware/**",
-          "utils/**"
-        ]
-      }
+      "src": "server.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/api/index.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Accept, Authorization"
-      }
+      "dest": "server.js"
     }
-  ],
-  "env": {
-    "VERCEL": "1",
-    "NODE_ENV": "production"
-  }
+  ]
 }
