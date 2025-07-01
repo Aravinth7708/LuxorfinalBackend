@@ -26,21 +26,49 @@ app.use((req, res, next) => {
 
 // Enhanced CORS configuration with better error handling
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://luxor-home-stays.vercel.app', 'https://luxorhomestays.com'],
+  origin: function(origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173', 
+      'https://luxor-home-stays.vercel.app', 
+      'https://luxorhomestays.com',
+      undefined  // Allow requests with no origin (like mobile apps, curl, etc)
+    ];
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log(`CORS blocked origin: ${origin}`);
+      callback(null, false);
+    }
+  },
   credentials: true,
-
+  exposedHeaders: ['Content-Range', 'X-Total-Count'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+  maxAge: 86400,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-app.use(express.json()); // Increase JSON payload limit
+app.use(express.json({ limit: '2mb' })); // Increase JSON payload limit
 
-// Root health check endpoint
+// Root health check endpoint with more robust error handling
 app.get('/', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'LuxorStay API is running',
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development'
-  });
+  try {
+    res.json({
+      status: 'ok',
+      message: 'LuxorStay API is running',
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error in root endpoint:', error);
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Server encountered an error processing the request',
+      error: process.env.NODE_ENV === 'production' ? undefined : error.message
+    });
+  }
 });
 
 // API routes
