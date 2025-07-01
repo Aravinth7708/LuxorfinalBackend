@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
-// import path from 'path';
+import connectDB from './utils/dbConnect.js';
 
 dotenv.config();
 
@@ -13,6 +13,14 @@ import authRoutes from './routes/authRoutes.js';
 import photoGalleryRoutes from './routes/photoGalleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
+
+// Connect to MongoDB
+connectDB()
+  .then(() => console.log('Database connection established'))
+  .catch(err => {
+    console.error('Failed to connect to database:', err.message);
+    process.exit(1); // Exit if database connection fails
+  });
 
 const app = express();
 

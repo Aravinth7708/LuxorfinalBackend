@@ -1,97 +1,86 @@
 import mongoose from 'mongoose';
 
-// Cache the database connection
-let cached = global.mongoose;
+// Configure mongoose for better error handling
+mongoose.set('strictQuery', false);
 
-if (!cached) {
-  cached = global.mongoose = { 
-    conn: null, 
-    promise: null,
-    retries: 0
-  };
-}
+// Cache connection for reuse
+let cachedConnection = null;
+let connectionAttempts = 0;
+const MAX_CONNECTION_ATTEMPTS = 5;
 
 /**
- * Connect to MongoDB with connection pooling optimized for serverless
+ * Connect to MongoDB using environment variables
  */
-async function dbConnect() {
-  // If we already have a connection, use it
-  if (cached.conn) {
+const connectDB = async () => {
+  // If we already have a connection, return it
+  if (cachedConnection && mongoose.connection.readyState === 1) {
     console.log('[DB] Using existing database connection');
-    return cached.conn;
+    return cachedConnection;
   }
 
-  // If we're already connecting, wait for it to complete
-  if (cached.promise) {
-    console.log('[DB] Using existing connection promise');
-    try {
-      cached.conn = await cached.promise;
-      return cached.conn;
-    } catch (error) {
-      console.error('[DB] Previous connection failed, retrying', error.message);
-      // Previous attempt failed, reset promise to try again
-      cached.promise = null;
-      // Increment retry count and continue
-      cached.retries++;
-    }
-  }
-
-  // Maximum connection retries
-  const MAX_RETRIES = 3;
-  
-  // Get MongoDB URI from environment variable
-  const MONGO_URI = process.env.MONGO_URI;
-  
-  if (!MONGO_URI) {
-    console.error('[DB] MONGO_URI is not defined in environment variables');
-    throw new Error('MongoDB connection string is not defined');
-  }
-
-  // Only attempt to connect if we haven't exceeded retry count
-  if (cached.retries >= MAX_RETRIES) {
-    console.error(`[DB] Exceeded maximum retry attempts (${MAX_RETRIES})`);
-    throw new Error(`Failed to connect to MongoDB after ${MAX_RETRIES} attempts`);
-  }
-
-  // Connection options
-  const opts = {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    bufferCommands: false,
-    serverSelectionTimeoutMS: 15000,
-    socketTimeoutMS: 60000,
-    maxIdleTimeMS: 120000,
-    maxPoolSize: 10,
-    connectTimeoutMS: 30000
-  };
-
-  console.log('[DB] Connecting to MongoDB...');
-  
   try {
-    // Create a new connection promise
-    cached.promise = mongoose.connect(MONGO_URI, opts).then(mongoose => {
-      console.log('[DB] MongoDB connected successfully!');
-      mongoose.connection.on('error', err => {
-        console.error('[DB] MongoDB connection error:', err);
-      });
-      mongoose.connection.on('disconnected', () => {
-        console.warn('[DB] MongoDB disconnected');
-      });
-      return mongoose;
+    // Limit reconnection attempts
+    if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
+      console.error(`[DB] Failed to connect after ${MAX_CONNECTION_ATTEMPTS} attempts`);
+      throw new Error('Maximum connection attempts exceeded');
+    }
+
+    connectionAttempts++;
+
+    // Get MongoDB URI from environment variable
+    const uri = process.env.MONGO_URI;
+    
+    if (!uri) {
+      throw new Error('MONGO_URI environment variable is not defined');
+    }
+
+    // Prepare connection options (compatible with MongoDB 6+)
+    const connectionOptions = {
+      serverSelectionTimeoutMS: 30000, // Increase timeout to 30 seconds
+      socketTimeoutMS: 60000,          // Keep socket alive longer
+      connectTimeoutMS: 30000,         // Connection timeout
+      maxPoolSize: 10,                 // Max connection pool size
+      retryWrites: true,
+      w: 'majority',
+      keepAlive: true
+    };
+
+    console.log('[DB] Connecting to MongoDB...');
+
+    // Connect to the database
+    const conn = await mongoose.connect(uri, connectionOptions);
+
+    // Setup connection event handlers for better debugging
+    mongoose.connection.on('connected', () => {
+      console.log('[DB] MongoDB connection established');
     });
 
-    // Await connection
-    cached.conn = await cached.promise;
-    return cached.conn;
-  } catch (error) {
-    console.error('[DB] MongoDB connection error:', error.message);
-    
-    // Reset promise so next request will try to connect again
-    cached.promise = null;
-    cached.retries++;
-    
-    throw error;
-  }
-}
+    mongoose.connection.on('error', (err) => {
+      console.error('[DB] MongoDB connection error:', err);
+    });
 
-export default dbConnect;
+    mongoose.connection.on('disconnected', () => {
+      console.warn('[DB] MongoDB connection disconnected');
+    });
+
+    // Handle process termination gracefully
+    process.on('SIGINT', async () => {
+      await mongoose.connection.close();
+      console.log('[DB] MongoDB connection closed due to app termination');
+      process.exit(0);
+    });
+
+    console.log(`[DB] MongoDB connected: ${mongoose.connection.host}`);
+    
+    // Cache the connection
+    cachedConnection = conn;
+    return conn;
+  } catch (error) {
+    console.error('[DB] Error connecting to MongoDB:', error.message);
+    // Wait before retrying connection
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    return connectDB(); // Recursive retry
+  }
+};
+
+export default connectDB;
