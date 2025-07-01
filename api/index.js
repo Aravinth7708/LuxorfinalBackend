@@ -2,16 +2,16 @@
 
 const app = require('../server');
 
-// Export the app for Vercel serverless deployment
-module.exports = app;
-    console.error('[VERCEL ERROR]:', err);
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal Server Error',
-      path: req.url,
-      timestamp: new Date().toISOString()
-    });
- 
+// Add global error handler for Vercel environment
+app.use((err, req, res, next) => {
+  console.error('[VERCEL ERROR]:', err);
+  res.status(500).json({
+    status: 'error',
+    message: 'Internal Server Error',
+    path: req.url,
+    timestamp: new Date().toISOString()
+  });
+});
 
-// Export the Express app for Vercel serverless deployment
+// Export the app for Vercel serverless deployment
 module.exports = app;

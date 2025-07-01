@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const path = require('path');
 
 dotenv.config();
 
@@ -14,6 +15,23 @@ const newsletterRoutes = require('./routes/newsletterRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 
 const app = express();
+
+// Force Express to use router.js (before other middleware)
+app.set('case sensitive routing', false);
+app.set('strict routing', false);
+
+// Create a basic router instance that Express can use internally
+const basicRouter = express.Router();
+app.use(basicRouter);
+
+// Make sure express.Router exists and is properly initialized
+if (!express.Router) {
+  console.error("ERROR: express.Router is not defined!");
+  // Create a basic polyfill for Router
+  express.Router = function() {
+    return basicRouter;
+  };
+}
 
 // Improved error handling for serverless environments
 const isVercel = process.env.VERCEL === '1';

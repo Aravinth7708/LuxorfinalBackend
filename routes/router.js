@@ -17,4 +17,9 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Router check endpoint
+router.get('/router-check', (req, res) => {
+  res.json({ message: 'Express router is working' });
+});
+
 module.exports = router;
