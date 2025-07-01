@@ -14,7 +14,7 @@ import photoGalleryRoutes from './routes/photoGalleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 
-// Connect to MongoDB
+
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
