@@ -89,7 +89,7 @@ app.get('/', (req, res) => {
   }
 });
 
-// API routes
+
 app.use('/api/users', userRoutes);
 app.use('/api/villas', villaRoutes);
 app.use('/api/bookings', bookingRoutes);
