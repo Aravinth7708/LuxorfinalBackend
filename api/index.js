@@ -11,8 +11,7 @@ module.exports = app;
       path: req.url,
       timestamp: new Date().toISOString()
     });
-  });
-}
+ 
 
 // Export the Express app for Vercel serverless deployment
 module.exports = app;
