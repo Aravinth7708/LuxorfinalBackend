@@ -1,8 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const photoGalleryController = require('../controllers/photoGalleryController');
+import express from 'express';
+import * as photoGalleryController from '../controllers/photoGalleryController.js';
 
+const router = express.Router();
+
+// Routes currently implemented in the controller
 router.post('/save', photoGalleryController.saveGallery);
 router.get('/:villaId', photoGalleryController.getGallery);
 
-module.exports = router;
+export default router;
