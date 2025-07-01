@@ -1,6 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "description": "",
   "main": "server.js",
   "type": "commonjs",
   "engines": {
@@ -9,13 +10,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "local": "node startLocal.js",
-    "vercel-build": "npm install express@4.17.1"
+    "local": "node startLocal.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "axios": "^1.6.2",
     "bcrypt": "^6.0.0",
