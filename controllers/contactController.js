@@ -4,21 +4,44 @@ const nodemailer = require('nodemailer');
 exports.submitContactForm = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
-
+    
+    // Validate required fields
     if (!name || !email || !message) {
-      return res.status(400).json({
+      return res.status(400).json({ 
         success: false,
-        error: 'Please provide name, email and message'
+        error: 'Please provide name, email and message' 
       });
     }
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER || process.env.gmail,
-        pass: process.env.EMAIL_PASSWORD || process.env.pass
-      }
-    });
+    // Configure mail transport with better error handling for serverless
+    let transporter;
+    try {
+      transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || process.env.gmail,
+          pass: process.env.EMAIL_PASSWORD || process.env.pass
+        },
+        // Improve connection handling for serverless
+        pool: true,
+        maxConnections: 1,
+        maxMessages: 5,
+        rateDelta: 1000,
+        rateLimit: 5
+      });
+      
+      // Verify connection configuration
+      await transporter.verify();
+      console.log('[CONTACT] Email transporter verified successfully');
+    } catch (emailSetupError) {
+      console.error('[CONTACT] Email transporter setup error:', emailSetupError);
+      // Still continue - don't fail the whole process if email doesn't work
+      return res.status(200).json({ 
+        success: true,
+        message: 'Your message has been received. Email notification could not be sent.',
+        emailSent: false
+      });
+    }
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -193,26 +216,37 @@ exports.submitContactForm = async (req, res) => {
       `
     };
 
-    // Send emails
-    console.log('[CONTACT] Sending notification email to admin');
-    await transporter.sendMail(mailOptions);
+    // Try sending emails with better error handling
+    try {
+      console.log('[CONTACT] Sending notification email to admin');
+      await transporter.sendMail(mailOptions);
+      
+      console.log('[CONTACT] Sending auto-reply to user');
+      await transporter.sendMail(userConfirmation);
+      
+      console.log('[CONTACT] Emails sent successfully');
+    } catch (emailSendError) {
+      console.error('[CONTACT] Error sending email:', emailSendError);
+      // Return success even if email fails, so the API doesn't crash
+      return res.status(200).json({ 
+        success: true,
+        message: 'Your message has been received. Email notification could not be sent.',
+        emailSent: false
+      });
+    }
 
-    console.log('[CONTACT] Sending auto-reply to user');
-    await transporter.sendMail(userConfirmation);
-
-    console.log('[CONTACT] Emails sent successfully');
-
-    // Fix: Return properly structured success response
+    // Return properly structured success response
     return res.status(200).json({
       success: true,
-      message: 'Your message has been sent successfully!'
+      message: 'Your message has been sent successfully!',
+      emailSent: true
     });
-
   } catch (err) {
     console.error('Contact form error:', err);
-    res.status(500).json({
+    res.status(500).json({ 
       success: false,
-      error: 'Failed to send message. Please try again later.'
+      error: 'Failed to send message. Please try again later.',
+      details: process.env.NODE_ENV === 'production' ? null : err.message 
     });
   }
 };

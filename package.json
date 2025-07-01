@@ -6,12 +6,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "local": "node startLocal.js"
+    "local": "node startLocal.js",
+    "vercel-build": "echo 'Building for Vercel'"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "dependencies": {
     "axios": "^1.6.2",
     "bcrypt": "^6.0.0",
