@@ -1,6 +1,5 @@
 import express from 'express';
 import * as photoGalleryController from '../controllers/photoGalleryController.js';
-import { authMiddleware, adminMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -14,5 +13,9 @@ router.get('/:id', photoGalleryController.getPhotoById);
 router.post('/', authMiddleware, adminMiddleware, photoGalleryController.addPhoto);
 router.put('/:id', authMiddleware, adminMiddleware, photoGalleryController.updatePhoto);
 router.delete('/:id', authMiddleware, adminMiddleware, photoGalleryController.deletePhoto);
+
+// Additional routes
+router.post('/save', photoGalleryController.saveGallery);
+router.get('/:villaId', photoGalleryController.getGallery);
 
 export default router;

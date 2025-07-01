@@ -1,5 +1,4 @@
-
-import monngoose from "mongoose"
+import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema({
   villaId: {
@@ -92,4 +91,5 @@ bookingSchema.pre('save', function(next) {
   next();
 });
 
+export default mongoose.model('Booking', bookingSchema);
 module.exports = mongoose.model('Booking', bookingSchema);
