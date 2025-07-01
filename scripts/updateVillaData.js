@@ -1,11 +1,17 @@
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get current file directory to properly resolve relative paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: join(__dirname, '../.env') });
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -15,8 +21,31 @@ mongoose.connect(process.env.MONGODB_URI, {
   process.exit(1);
 });
 
-// Import the Villa model
-const Villa = require('../models/Villa');
+// Import the Villa model - using dynamic import for ES modules
+const Villa = mongoose.model('Villa', new mongoose.Schema({
+  name: { type: String, required: true },
+  location: { type: String, required: true },
+  price: { type: Number, required: true },
+  weekdayPrice: { type: Number },
+  weekendPrice: { type: Number },
+  description: { type: String },
+  longDescription: { type: String },
+  facilities: [{ 
+    name: { type: String, required: true },
+    image: { type: String }
+  }],
+  images: [{ type: String }],
+  guests: { type: Number },
+  maxGuests: { type: Number },
+  bedrooms: { type: Number },
+  bathrooms: { type: Number },
+  events: { type: Boolean, default: false },
+  eventPricing: { type: String },
+  nearbyAttractions: [{ type: String }],
+  specificRules: { type: String },
+  securityDeposit: { type: Number },
+  rating: { type: Number, default: 4.5 }
+}, { collection: 'Villas' }));
 
 // Updated villa data based on text descriptions
 const villaUpdates = [

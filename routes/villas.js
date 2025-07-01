@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import villaController from '../controllers/villaController.js';
+import { authMiddleware, adminMiddleware } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const villaController = require('../controllers/villaController');
-const { authMiddleware, adminMiddleware } = require('../middleware/authMiddleware');
 
 // Public routes
 router.get('/', villaController.getAllVillas);

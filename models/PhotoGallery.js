@@ -1,9 +1,30 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const photoGallerySchema = new mongoose.Schema({
-  villaId: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: true },
-  images: [{ type: String, required: true }],
-  createdAt: { type: Date, default: Date.now }
-});
+  title: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String
+  },
+  imageUrl: {
+    type: String,
+    required: true
+  },
+  category: {
+    type: String,
+    required: true,
+    enum: ['Villa', 'Room', 'Exterior', 'Amenities', 'Other']
+  },
+  featured: {
+    type: Boolean,
+    default: false
+  },
+  dateAdded: {
+    type: Date,
+    default: Date.now
+  }
+}, { collection: 'PhotoGallery' });
 
-module.exports = mongoose.model('PhotoGallery', photoGallerySchema);
+export default mongoose.model('PhotoGallery', photoGallerySchema);

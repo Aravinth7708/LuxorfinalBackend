@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import mongoose from 'mongoose';
+import Villa from '../models/Villa';
+
 const router = express.Router();
-const mongoose = require('mongoose');
-const Villa = require('../models/Villa');
 
 // Debug route to check MongoDB connection status
 router.get('/mongo-status', async (req, res) => {
@@ -64,4 +65,38 @@ router.get('/image-test', async (req, res) => {
   }
 });
 
-module.exports = router;
+// Debug routes for testing and monitoring
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Debug API is working',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+router.get('/env', (req, res) => {
+  // Only return safe environment variables
+  const safeEnvVars = {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    SERVER_URL: process.env.SERVER_URL,
+    API_VERSION: process.env.API_VERSION || '1.0.0',
+  };
+  
+  res.json({
+    success: true,
+    environment: safeEnvVars
+  });
+});
+
+router.get('/error', (req, res, next) => {
+  // Deliberately trigger an error for testing error handling
+  try {
+    throw new Error('Test error triggered via debug endpoint');
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;

@@ -1,94 +1,94 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+import User from '../models/User.js';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 
-// Sync user from frontend (Clerk)
-exports.syncUser = async (req, res) => {
-  try {
-    console.log("[BACKEND] /api/users/sync called. Body received:", req.body);
-    const { clerkId, email, name, imageUrl } = req.body;
-    if (!clerkId || !email) {
-      console.error("[BACKEND] Missing required fields", req.body);
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    let user = await User.findOne({ clerkId });
-    if (!user) {
-      console.log("[BACKEND] No user found, creating new user...");
-      user = await User.create({ clerkId, email, password: clerkId, name, imageUrl });
-      console.log("[BACKEND] User created:", user);
-    } else {
-      console.log("[BACKEND] User found, updating...");
-      user.email = email;
-      user.password = clerkId;
-      user.name = name;
-      user.imageUrl = imageUrl;
-      await user.save();
-      console.log("[BACKEND] User updated:", user);
-    }
-    res.json({ success: true, user });
-  } catch (err) {
-    console.error("[BACKEND] Error in syncUser:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// New user registration
-exports.registerUser = async (req, res) => {
+// Register a new user
+export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
     
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: 'User already exists with this email' });
     }
     
     // Create new user
-    const user = await User.create({
-      name,
-      email,
-      password, // In production, you should hash this password
-      clerkId: 'local-' + Date.now(), // Placeholder for local auth users
-    });
+    const user = new User({ name, email, password });
+    await user.save();
     
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
-    );
+    // Generate JWT token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
     
-    // Return user without password
-    const userWithoutPassword = {
-      _id: user._id,
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      createdAt: user.createdAt
-    };
-    
-    res.json({ 
-      success: true, 
-      token, 
-      user: userWithoutPassword
+    res.status(201).json({ 
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
     });
   } catch (err) {
-    console.error("Error in registerUser:", err);
+    console.error('Register error:', err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// User login
-exports.loginUser = async (req, res) => {
+// Login user
+export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
+    
+    // Check password
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
+    if (!isPasswordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // Generate JWT token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get user profile
+export const getUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('Get profile error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Sync user data (for clerk auth)
+export const syncUser = async (req, res) => {
+  try {
+    
     
     // Find user
     const user = await User.findOne({ email });
@@ -128,7 +128,7 @@ exports.loginUser = async (req, res) => {
     console.error("Error in loginUser:", err);
     res.status(500).json({ error: err.message });
   }
-};
+}
 
 // Get user profile
 exports.getUserProfile = async (req, res) => {

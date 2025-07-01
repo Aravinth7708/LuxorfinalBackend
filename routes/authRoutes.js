@@ -1,30 +1,30 @@
-const express = require('express');
+import express from 'express';
+import * as authController from '../controllers/authController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const authController = require('../controllers/authController');
 
-// Login route
-if (authController.login) {
-  router.post('/login', authController.login);
-}
+// Authentication routes
+router.post('/register', authController.register);
+router.post('/login', authController.login);
+router.post('/logout', authController.logout);
+router.post('/refresh-token', authController.refreshToken);
 
-// Register route
-if (authController.register) {
-  router.post('/register', authController.register);
-}
+// Password management
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
 
-// Google auth route
-if (authController.handleGoogleAuth) {
-  router.post('/google-auth', authController.handleGoogleAuth);
-}
+// Protected routes
+router.get('/profile', authMiddleware, authController.getProfile);
+router.put('/profile', authMiddleware, authController.updateProfile);
+router.post('/change-password', authMiddleware, authController.changePassword);
 
-// These routes might not have implementations - only add if they exist
-if (authController.forgotPassword) {
-  router.post('/forgot-password', authController.forgotPassword);
-}
+
+
 
 if (authController.resetPassword) {
   router.post('/reset-password', authController.resetPassword);
 }
 
 // Export router
-module.exports = router;
+export default router;

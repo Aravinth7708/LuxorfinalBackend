@@ -1,5 +1,5 @@
-const PhotoGallery = require('../models/PhotoGallery');
 
+import PhotoGallery from '../models/PhotoGallery';
 // Add or update gallery for a villa
 exports.saveGallery = async (req, res) => {
   try {

@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+
+import monngoose from "mongoose"
 
 const bookingSchema = new mongoose.Schema({
   villaId: {

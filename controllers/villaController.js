@@ -1,7 +1,7 @@
-const Villa = require('../models/Villa');
+import Villa from '../models/Villa.js';
 
 // Add one or many villas
-exports.addVillas = async (req, res) => {
+export const addVillas = async (req, res) => {
   try {
     const villas = Array.isArray(req.body) ? req.body : [req.body];
     const result = await Villa.insertMany(villas);
@@ -12,7 +12,7 @@ exports.addVillas = async (req, res) => {
 };
 
 // Update villa details
-exports.updateVilla = async (req, res) => {
+export const updateVilla = async (req, res) => {
   try {
     const { id } = req.params;
     const updatedData = req.body;
@@ -34,7 +34,7 @@ exports.updateVilla = async (req, res) => {
 };
 
 // Get all villas with expanded details
-exports.getAllVillas = async (req, res) => {
+export const getAllVillas = async (req, res) => {
   try {
     const villas = await Villa.find();
     
@@ -57,7 +57,7 @@ exports.getAllVillas = async (req, res) => {
 };
 
 // Filter/search villas
-exports.searchVillas = async (req, res) => {
+export const searchVillas = async (req, res) => {
   try {
     const { name, location, minPrice, maxPrice } = req.query;
     let filter = {};
@@ -77,7 +77,7 @@ exports.searchVillas = async (req, res) => {
 };
 
 // Get villa by ID
-exports.getVillaById = async (req, res) => {
+export const getVillaById = async (req, res) => {
   try {
     const villaId = req.params.id;
     console.log(`[VILLA] Fetching villa with ID: ${villaId}`);
@@ -93,6 +93,33 @@ exports.getVillaById = async (req, res) => {
     res.json(villa);
   } catch (err) {
     console.error('Error fetching villa by ID:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Create new villa
+export const createVilla = async (req, res) => {
+  try {
+    const newVilla = new Villa(req.body);
+    const savedVilla = await newVilla.save();
+    res.status(201).json(savedVilla);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Delete villa
+export const deleteVilla = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedVilla = await Villa.findByIdAndDelete(id);
+    
+    if (!deletedVilla) {
+      return res.status(404).json({ error: 'Villa not found' });
+    }
+    
+    res.json({ message: 'Villa deleted successfully' });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };

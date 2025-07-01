@@ -1,8 +1,18 @@
-const express = require('express');
+import express from 'express';
+import * as photoGalleryController from '../controllers/photoGalleryController.js';
+import { authMiddleware, adminMiddleware } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const photoGalleryController = require('../controllers/photoGalleryController');
 
-router.post('/save', photoGalleryController.saveGallery);
-router.get('/:villaId', photoGalleryController.getGallery);
+// Public routes
+router.get('/', photoGalleryController.getAllPhotos);
+router.get('/featured', photoGalleryController.getFeaturedPhotos);
+router.get('/category/:category', photoGalleryController.getPhotosByCategory);
+router.get('/:id', photoGalleryController.getPhotoById);
 
-module.exports = router;
+// Admin routes with authentication and admin middleware
+router.post('/', authMiddleware, adminMiddleware, photoGalleryController.addPhoto);
+router.put('/:id', authMiddleware, adminMiddleware, photoGalleryController.updatePhoto);
+router.delete('/:id', authMiddleware, adminMiddleware, photoGalleryController.deletePhoto);
+
+export default router;

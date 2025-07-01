@@ -3,7 +3,7 @@
  * Ensures Express can always find a router module
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
 // Health check endpoint
@@ -22,4 +22,4 @@ router.get('/router-check', (req, res) => {
   res.json({ message: 'Express router is working' });
 });
 
-module.exports = router;
+export default router;

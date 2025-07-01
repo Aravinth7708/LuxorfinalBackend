@@ -1,38 +1,79 @@
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
-// Authentication middleware to verify JWT token
-const authMiddleware = (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   try {
-    // Get token from Authorization header
+    // Get token from header
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required. No token provided.' });
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        details: 'No authentication token provided'
+      });
     }
     
-    // Extract the token
     const token = authHeader.split(' ')[1];
     
     if (!token) {
-      return res.status(401).json({ error: 'Authentication required. Invalid token format.' });
+      return res.status(401).json({ 
+        error: 'Authentication failed',
+        details: 'Invalid token format' 
+      });
     }
-
+    
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
+    // Check if user exists
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ 
+        error: 'Authentication failed',
+        details: 'User not found' 
+      });
+    }
+    
     // Add user info to request
-    req.user = decoded;
+    req.user = {
+      userId: user._id,
+      email: user.email,
+      role: user.role || 'user'
+    };
     
     next();
   } catch (error) {
-    console.error("Auth middleware error:", error);
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token.' });
-    } else if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired.' });
+    console.error('[AUTH] Auth error:', error.message);
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Authentication failed',
+        details: 'Token expired' 
+      });
     }
-    return res.status(401).json({ error: 'Authentication failed.' });
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        error: 'Authentication failed',
+        details: 'Invalid token' 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Server error',
+      details: 'Authentication process failed' 
+    });
   }
 };
 
-module.exports = { authMiddleware };
+export const adminMiddleware = (req, res, next) => {
+  // Check if user is authenticated and has admin role
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ 
+      error: 'Access denied',
+      details: 'Admin privileges required'
+    });
+  }
+  
+  next();
+};

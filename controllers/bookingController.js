@@ -1,6 +1,7 @@
-const Booking = require('../models/Booking');
-const Villa = require('../models/Villa');
-const nodemailer = require('nodemailer');
+import Booking from '../models/Booking.js';
+import Villa from '../models/Villa.js';
+import nodemailer from 'nodemailer';
+
 // import Ramwater from "./img/Rw"
 exports.createBooking = async (req, res) => {
   try {

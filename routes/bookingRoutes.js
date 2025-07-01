@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import * as bookingController from '../controllers/bookingController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const bookingController = require('../controllers/bookingController');
-const { authMiddleware } = require('../middleware/authMiddleware');
 
 // Create a new booking
 router.post('/create', authMiddleware, bookingController.createBooking);
@@ -18,4 +19,4 @@ router.get('/:id', authMiddleware, bookingController.getBookingById);
 // Cancel a booking
 router.post('/:id/cancel', authMiddleware, bookingController.cancelBooking);
 
-module.exports = router;
+export default router;

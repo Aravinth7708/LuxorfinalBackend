@@ -1,12 +1,13 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const authRoutes = require('./routes/auth');
-const villaRoutes = require('./routes/villas');
-const bookingRoutes = require('./routes/bookings');
-const contactRoutes = require('./routes/contactRoutes');
-const path = require('path');
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import authRoutes from './routes/auth.js';
+import villaRoutes from './routes/villas.js';
+import bookingRoutes from './routes/bookings.js';
+import contactRoutes from './routes/contactRoutes.js';
+import path from 'path';
+
 
 const app = express();
 

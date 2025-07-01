@@ -1,5 +1,7 @@
-const Newsletter = require('../models/Newsletter');
-const nodemailer = require('nodemailer');
+import Booking from '../models/Booking.js';
+import Villa from '../models/Villa.js';
+import nodemailer from 'nodemailer';
+
 
 exports.subscribe = async (req, res) => {
   try {

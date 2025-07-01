@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 // Cache the database connection
 let cached = global.mongoose;
@@ -94,4 +94,4 @@ async function dbConnect() {
   }
 }
 
-module.exports = dbConnect;
+export default dbConnect;

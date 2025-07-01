@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const facilitySchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -27,4 +27,4 @@ const villaSchema = new mongoose.Schema({
   rating: { type: Number, default: 4.5 }
 }, { collection: 'Villas' });
 
-module.exports = mongoose.model('Villa', villaSchema);
+export default mongoose.model('Villa', villaSchema);

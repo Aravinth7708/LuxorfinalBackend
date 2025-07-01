@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import * as contactController from '../controllers/contactController.js';
+
 const router = express.Router();
-const contactController = require('../controllers/contactController');
 
-// POST /api/contact - Submit contact form
-router.post('/', contactController.submitContactForm);
+// POST /api/contact/submit - Submit contact form
+router.post('/submit', contactController.submitContactForm);
 
-module.exports = router;
+export default router;
