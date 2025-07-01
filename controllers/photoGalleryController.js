@@ -1,7 +1,7 @@
-const PhotoGallery = require('../models/PhotoGallery');
+import PhotoGallery from '../models/PhotoGallery.js';
 
 // Add or update gallery for a villa
-exports.saveGallery = async (req, res) => {
+export const saveGallery = async (req, res) => {
   try {
     const { villaId, images } = req.body;
     if (!villaId || !images || !Array.isArray(images)) {
@@ -19,7 +19,7 @@ exports.saveGallery = async (req, res) => {
 };
 
 // Get gallery by villaId
-exports.getGallery = async (req, res) => {
+export const getGallery = async (req, res) => {
   try {
     const { villaId } = req.params;
     const gallery = await PhotoGallery.findOne({ villaId });

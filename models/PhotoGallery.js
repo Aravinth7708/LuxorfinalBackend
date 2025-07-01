@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const photoGallerySchema = new mongoose.Schema({
   villaId: { type: mongoose.Schema.Types.ObjectId, ref: 'Villa', required: true },
@@ -6,4 +6,4 @@ const photoGallerySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('PhotoGallery', photoGallerySchema);
+export default mongoose.model('PhotoGallery', photoGallerySchema);
