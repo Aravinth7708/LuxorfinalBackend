@@ -13,8 +13,7 @@
           "models/**",
           "controllers/**",
           "middleware/**",
-          "utils/**",
-          ".env"
+          "utils/**"
         ]
       }
     }
