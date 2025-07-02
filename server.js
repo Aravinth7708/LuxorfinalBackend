@@ -55,7 +55,7 @@ app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
       'http://localhost:5173', 
-      'https://luxor-home-stays.vercel.app', 
+      'https://luxor-omega.vercel.app', 
       
       undefined  // Allow requests with no origin (like mobile apps, curl, etc)
     ];
