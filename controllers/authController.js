@@ -54,6 +54,7 @@ export const login = async (req, res) => {
   }
 };
 
+// Update only the register function to ensure no clerkId is used:
 export const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -68,8 +69,15 @@ export const register = async (req, res) => {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
     
-    // Create new user
-    const user = new User({ name, email, password });
+    // Create new user - make sure we only pass the fields defined in the schema
+    const user = new User({
+      name,
+      email,
+      password,
+      isVerified: false,
+      role: 'user'
+    });
+    
     await user.save();
     
     // Generate token
@@ -99,11 +107,12 @@ export const register = async (req, res) => {
   }
 };
 
+// Also update the Google auth handler to not reference clerkId:
 export const handleGoogleAuth = async (req, res) => {
   try {
-    const { email, name, googleId, profileImage } = req.body;
+    const { email, name, imageUrl, uid } = req.body;
     
-    if (!email || !googleId) {
+    if (!email || !uid) {
       return res.status(400).json({ error: 'Invalid Google auth data' });
     }
     
@@ -111,23 +120,23 @@ export const handleGoogleAuth = async (req, res) => {
     let user = await User.findOne({ email });
     
     if (!user) {
-      // Create new user if doesn't exist
+      // Create new user if doesn't exist - explicitly specify only valid fields
       user = new User({
         email,
         name,
-        googleId,
-        profileImage,
+        googleId: uid,
+        profileImage: imageUrl,
         isGoogleUser: true,
         isVerified: true
       });
       await user.save();
     } else {
       // Update existing user with Google info if needed
-      if (!user.googleId || user.googleId !== googleId) {
-        user.googleId = googleId;
+      if (!user.googleId || user.googleId !== uid) {
+        user.googleId = uid;
         user.isGoogleUser = true;
         user.isVerified = true;
-        if (profileImage) user.profileImage = profileImage;
+        if (imageUrl) user.profileImage = imageUrl;
         await user.save();
       }
     }

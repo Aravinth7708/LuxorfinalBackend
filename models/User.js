@@ -78,13 +78,4 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 
-// Additional pre-save hook to ensure clerkId is either valid or null
-userSchema.pre('save', function(next) {
-  // If clerkId is empty string, set it to null to avoid unique index issues
-  if (this.clerkId === '') {
-    this.clerkId = null;
-  }
-  next();
-});
-
 export default mongoose.model('User', userSchema);
