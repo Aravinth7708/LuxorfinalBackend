@@ -24,7 +24,4 @@ router.post('/change-password', authMiddleware, authController.changePassword);
 
 // Export router
 export default router;
-}
 
-// Export router
-export default router;

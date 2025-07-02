@@ -77,8 +77,6 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-export default mongoose.model('User', userSchema);
-};
 
 // Additional pre-save hook to ensure clerkId is either valid or null
 userSchema.pre('save', function(next) {
