@@ -3,11 +3,22 @@ import mongoose from 'mongoose';
 const otpSchema = new mongoose.Schema({
   email: {
     type: String,
-    required: true
+    required: true,
+    trim: true,
+    lowercase: true
   },
   otp: {
     type: String,
     required: true
+  },
+  purpose: {
+    type: String,
+    enum: ['registration', 'password-reset'],
+    default: 'registration'
+  },
+  userData: {
+    type: Object,
+    default: null
   },
   createdAt: {
     type: Date,

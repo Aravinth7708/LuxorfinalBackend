@@ -41,7 +41,7 @@ const userSchema = new mongoose.Schema({
   phoneAuthOnly: { type: Boolean, default: false },
   phoneVerified: { type: Boolean, default: false },
   
-  // User status
+  // User status - Modified to default to false for email verification
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
   

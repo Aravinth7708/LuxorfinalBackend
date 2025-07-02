@@ -6,16 +6,18 @@ const router = express.Router();
 
 // Authentication routes
 router.post('/register', authController.register);
+router.post('/verify-otp', authController.verifyRegistrationOTP); // New endpoint for OTP verification
 router.post('/login', authController.login);
 router.post('/logout', authController.logout);
 router.post('/refresh-token', authController.refreshToken);
 
-// Add Google auth endpoint
+// Google authentication (no OTP needed)
 router.post('/google-auth', authController.handleGoogleAuth);
 
-// Password management
+// Password management with OTP verification
 router.post('/forgot-password', authController.forgotPassword);
-router.post('/reset-password', authController.resetPassword);
+router.post('/verify-reset-otp', authController.verifyResetOTP);  // New endpoint for password reset verification
+router.post('/resend-otp', authController.resendOTP); // New endpoint for resending OTP
 
 // Protected routes
 router.get('/profile', authMiddleware, authController.getProfile);
