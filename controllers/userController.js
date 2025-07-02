@@ -130,8 +130,7 @@ export const getUserProfile = async (req, res) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
       const userId = decoded.userId;
-      
-      // Find user
+    
       const user = await User.findById(userId);
       
       if (!user) {
