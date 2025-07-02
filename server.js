@@ -56,7 +56,7 @@ app.use(cors({
     const allowedOrigins = [
       'http://localhost:5173', 
       'https://luxor-home-stays.vercel.app', 
-      'https://luxorhomestays.com',
+      
       undefined  // Allow requests with no origin (like mobile apps, curl, etc)
     ];
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
