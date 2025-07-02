@@ -4,10 +4,13 @@ import nodemailer from "nodemailer"
 // Handle contact form submissions
 export const submitContactForm = async (req, res) => {
   try {
+    console.log('[CONTACT] Received form submission:', req.body);
+    
     const { name, email, phone, subject, message } = req.body;
     
     // Validate required fields
     if (!name || !email || !message) {
+      console.error('[CONTACT] Missing required fields:', { name, email, message });
       return res.status(400).json({ 
         success: false,
         error: 'Please provide name, email and message' 
