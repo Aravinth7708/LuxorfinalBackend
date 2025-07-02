@@ -139,7 +139,7 @@ export default app;
 
 // Start the server only when this file is executed directly (not when imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const PORT = process.env.PORT || 5000;
+  const PORT =  8000;
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} (${process.env.NODE_ENV || 'unset'})`);
   });
