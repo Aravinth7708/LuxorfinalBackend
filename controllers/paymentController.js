@@ -39,7 +39,7 @@ export const createOrder = async (req, res) => {
     } = req.body;
 
     // FOR TESTING: Set amount to 10 rupees (1000 paise) regardless of what was sent
-    const amount = 10; // 10 rupees fixed amount for testing
+    const amount = 100; // 10 rupees fixed amount for testing
     console.log("[PAYMENT] Using test amount of ₹10 for all transactions");
 
     // Validate required fields
