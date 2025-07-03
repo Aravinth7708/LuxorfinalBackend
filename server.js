@@ -55,6 +55,7 @@ app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
       'http://localhost:5173', 
+      'http://localhost:5174',
       'https://luxor-omega.vercel.app', 
       'http://localhost:5176',
       'https://www.luxorholidayhomestays.com',
