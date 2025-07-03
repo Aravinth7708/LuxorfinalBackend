@@ -102,7 +102,7 @@ export const createOrder = async (req, res) => {
     
     // Create order in Razorpay
     const order = await razorpay.orders.create({
-      amount: 300, // Convert to paise and ensure it's an integer
+      amount: 100, // Convert to paise and ensure it's an integer
       currency,
       receipt: receiptId,
       notes: {
