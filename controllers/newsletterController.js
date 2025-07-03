@@ -34,8 +34,8 @@ export const subscribe = async (req, res) => {
 
     return res.json({
       message: isNew
-        ? 'Subscribed successfully for 1 year'
-        : 'Subscription renewed for 1 year',
+        ? 'Subscription successful! Stay tuned for updates ..!'
+        : 'LuxorStayHomes always welcomes you back! ',
       subscription
     });
   } catch (err) {

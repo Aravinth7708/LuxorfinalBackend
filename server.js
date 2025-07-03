@@ -108,7 +108,7 @@ app.use('/api/photo-gallery', photoGalleryRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 
-// Special redirect for /rooms/:id to /villas/:id for backward compatibility
+
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
   // Redirect to the villas endpoint
