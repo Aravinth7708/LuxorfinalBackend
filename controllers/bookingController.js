@@ -661,3 +661,57 @@ export const getBookingById = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// Add this function to check for date availability
+export const checkAvailability = async (req, res) => {
+  try {
+    const { villaId, checkIn, checkOut } = req.query;
+    
+    if (!villaId || !checkIn || !checkOut) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required parameters: villaId, checkIn and checkOut dates are required' 
+      });
+    }
+
+    console.log("[BOOKING] Checking availability for villa:", villaId);
+    console.log("[BOOKING] Date range:", { checkIn, checkOut });
+    
+    // Find any bookings that overlap with the requested date range
+    const overlappingBookings = await Booking.find({
+      villaId: villaId,
+      status: { $ne: 'cancelled' }, // Exclude cancelled bookings
+      $or: [
+        // Case 1: Check-in date falls within existing booking
+        {
+          checkIn: { $lte: new Date(checkOut) },
+          checkOut: { $gte: new Date(checkIn) }
+        }
+      ]
+    });
+
+    const isAvailable = overlappingBookings.length === 0;
+    
+    console.log("[BOOKING] Villa availability:", {
+      isAvailable,
+      overlappingBookingsCount: overlappingBookings.length
+    });
+
+    // Return availability status and blocked dates
+    return res.status(200).json({
+      success: true,
+      isAvailable,
+      blockedDates: overlappingBookings.map(booking => ({
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut
+      }))
+    });
+  } catch (error) {
+    console.error("[BOOKING] Error checking availability:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error checking availability",
+      error: process.env.NODE_ENV === 'production' ? null : error.message
+    });
+  }
+};

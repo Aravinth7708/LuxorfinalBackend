@@ -21,8 +21,8 @@ export const createOrder = async (req, res) => {
   try {
     console.log("[PAYMENT] Creating new order:", req.body);
     
-    // Get data from request (but we'll override amount for testing)
     const {
+      amount,
       currency = 'INR',
       villaName,
       villaId,
@@ -38,12 +38,8 @@ export const createOrder = async (req, res) => {
       totalNights
     } = req.body;
 
-    // FOR TESTING: Set amount to 10 rupees (1000 paise) regardless of what was sent
-    const amount = 10; // 10 rupees fixed amount for testing
-    console.log("[PAYMENT] Using test amount of ₹10 for all transactions");
-
     // Validate required fields
-    if (!villaId || !checkIn || !checkOut || !guestName) {
+    if (!amount || !villaId || !checkIn || !checkOut || !guestName) {
       console.error("[PAYMENT] Missing required fields:", req.body);
       return res.status(400).json({ 
         success: false, 
@@ -51,23 +47,62 @@ export const createOrder = async (req, res) => {
       });
     }
     
-    // Check if villa exists (can be simplified during testing)
-    // For testing, we can skip actual DB check
-    // const villa = await Villa.findById(villaId);
-    // if (!villa) {
-    //   console.error("[PAYMENT] Villa not found:", villaId);
-    //   return res.status(404).json({
-    //     success: false,
-    //     message: 'Villa not found'
-    //   });
-    // }
+    // Check if amount is a valid number
+    if (isNaN(amount) || amount <= 0) {
+      console.error("[PAYMENT] Invalid amount:", amount);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment amount'
+      });
+    }
+
+    // Check villa availability for the selected dates
+    const overlappingBookings = await Booking.find({
+      villaId: villaId,
+      status: { $ne: 'cancelled' }, // Exclude cancelled bookings
+      $or: [
+        // Check for date range overlaps
+        {
+          checkIn: { $lte: new Date(checkOut) },
+          checkOut: { $gte: new Date(checkIn) }
+        }
+      ]
+    });
+
+    if (overlappingBookings.length > 0) {
+      console.error("[PAYMENT] Villa not available for selected dates:", {
+        villaId,
+        checkIn,
+        checkOut,
+        overlappingBookingsCount: overlappingBookings.length
+      });
+      
+      return res.status(409).json({
+        success: false,
+        message: 'Villa is already booked for the selected dates',
+        conflictingDates: overlappingBookings.map(booking => ({
+          checkIn: booking.checkIn,
+          checkOut: booking.checkOut
+        }))
+      });
+    }
+
+    // Check if villa exists
+    const villa = await Villa.findById(villaId);
+    if (!villa) {
+      console.error("[PAYMENT] Villa not found:", villaId);
+      return res.status(404).json({
+        success: false,
+        message: 'Villa not found'
+      });
+    }
 
     // Create unique receipt ID
-    const receiptId = `luxorstay_test_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const receiptId = `luxorstay_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     
-    // Create order in Razorpay - ALWAYS using 10 rupees (1000 paise) for testing
+    // Create order in Razorpay
     const order = await razorpay.orders.create({
-      amount: 500, // 10 rupees in paise
+      amount: 300, // Convert to paise and ensure it's an integer
       currency,
       receipt: receiptId,
       notes: {
@@ -80,12 +115,11 @@ export const createOrder = async (req, res) => {
         checkInTime,
         checkOutTime,
         guests,
-        userId: req.user?.id || req.user?.userId,
-        testMode: "true" // Mark as test transaction
+        userId: req.user?.id || req.user?.userId
       }
     });
 
-    console.log("[PAYMENT] Test order created successfully:", order.id);
+    console.log("[PAYMENT] Order created successfully:", order.id);
 
     // Return order details to client
     res.status(200).json({
@@ -96,8 +130,7 @@ export const createOrder = async (req, res) => {
         currency: order.currency,
         receipt: order.receipt,
         status: order.status
-      },
-      testMode: true // Flag to indicate this is a test transaction
+      }
     });
   } catch (error) {
     console.error('[PAYMENT] Create order error:', error);

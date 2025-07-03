@@ -19,4 +19,7 @@ router.get('/:id', authMiddleware, bookingController.getBookingById);
 // Cancel a booking
 router.post('/:id/cancel', authMiddleware, bookingController.cancelBooking);
 
+// Check availability
+router.get('/check-availability', bookingController.checkAvailability);
+
 export default router;
