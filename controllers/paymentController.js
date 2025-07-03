@@ -16,7 +16,7 @@ const razorpay = new Razorpay({
 // Add console logs to verify keys are loaded
 console.log("Razorpay initialized with key:", process.env.RazorpayKey?.substring(0, 5) + "...");
 
-
+const router = require('express').Router();
 export const createOrder = async (req, res) => {
   try {
     console.log("[PAYMENT] Creating new order:", req.body);
