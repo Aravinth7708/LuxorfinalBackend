@@ -14,7 +14,7 @@ import photoGalleryRoutes from './routes/photoGalleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 
-
+import paymentRoutes from './routes/paymentRoutes.js';
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
@@ -109,6 +109,11 @@ app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 
 
+// ...middleware and other routes...
+
+// Add the payment routes
+app.use('/api/payments', paymentRoutes);
+
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
   // Redirect to the villas endpoint
@@ -141,7 +146,7 @@ export default app;
 
 // Start the server only when this file is executed directly (not when imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const PORT =  8000;
+  const PORT =  5000;
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} (${process.env.NODE_ENV || 'unset'})`);
   });
