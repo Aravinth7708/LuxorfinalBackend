@@ -676,52 +676,29 @@ export const getBookingById = async (req, res) => {
 export const checkAvailability = async (req, res) => {
   try {
     const { villaId, checkIn, checkOut } = req.query;
-    
-    if (!villaId || !checkIn || !checkOut) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Missing required parameters: villaId, checkIn and checkOut dates are required' 
-      });
+    if (!villaId) {
+      return res.status(400).json({ success: false, message: 'villaId is required' });
     }
-
-    console.log("[BOOKING] Checking availability for villa:", villaId);
-    console.log("[BOOKING] Date range:", { checkIn, checkOut });
-    
-    // Find any bookings that overlap with the requested date range
+    // Find bookings that overlap with any date (not cancelled)
     const overlappingBookings = await Booking.find({
       villaId: villaId,
-      status: { $ne: 'cancelled' }, // Exclude cancelled bookings
+      status: { $ne: 'cancelled' },
       $or: [
-        // Case 1: Check-in date falls within existing booking
         {
-          checkIn: { $lte: new Date(checkOut) },
-          checkOut: { $gte: new Date(checkIn) }
+          checkIn: { $lte: new Date(checkOut || '2999-12-31') },
+          checkOut: { $gte: new Date(checkIn || '1900-01-01') }
         }
       ]
     });
-
-    const isAvailable = overlappingBookings.length === 0;
-    
-    console.log("[BOOKING] Villa availability:", {
-      isAvailable,
-      overlappingBookingsCount: overlappingBookings.length
-    });
-
-    // Return availability status and blocked dates
+    // Return all blocked date ranges
     return res.status(200).json({
       success: true,
-      isAvailable,
-      blockedDates: overlappingBookings.map(booking => ({
-        checkIn: booking.checkIn,
-        checkOut: booking.checkOut
+      blockedDates: overlappingBookings.map(b => ({
+        checkIn: b.checkIn,
+        checkOut: b.checkOut
       }))
     });
   } catch (error) {
-    console.error("[BOOKING] Error checking availability:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error checking availability",
-      error: process.env.NODE_ENV === 'production' ? null : error.message
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
