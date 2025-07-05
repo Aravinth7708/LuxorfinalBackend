@@ -6,7 +6,8 @@ const router = express.Router();
 
 // Authentication routes
 router.post('/register', authController.register);
-router.post('/verify-otp', authController.verifyRegistrationOTP); // New endpoint for OTP verification
+router.post('/verify-registration-otp', authController.verifyRegistrationOTP);
+router.post('/verify-otp', authController.verifyRegistrationOTP);  // Alias for backward compatibility
 router.post('/login', authController.login);
 router.post('/logout', authController.logout);
 router.post('/refresh-token', authController.refreshToken);
@@ -16,8 +17,8 @@ router.post('/google-auth', authController.handleGoogleAuth);
 
 // Password management with OTP verification
 router.post('/forgot-password', authController.forgotPassword);
-router.post('/verify-reset-otp', authController.verifyResetOTP);  // New endpoint for password reset verification
-router.post('/resend-otp', authController.resendOTP); // New endpoint for resending OTP
+router.post('/verify-reset-otp', authController.verifyResetOTP);
+router.post('/resend-otp', authController.resendOTP);
 
 // Protected routes
 router.get('/profile', authMiddleware, authController.getProfile);
