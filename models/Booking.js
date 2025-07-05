@@ -67,7 +67,16 @@ const bookingSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  location: String
+  location: String,
+  cancellationHistory: [
+    {
+      cancelledAt: Date,
+      reason: String,
+      refundAmount: Number,
+      refundPercentage: Number,
+      cancelledBy: String // userId or email
+    }
+  ]
 }, { timestamps: true });
 
 // Add a pre-save hook to calculate total amount if it's missing

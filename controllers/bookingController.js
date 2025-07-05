@@ -591,7 +591,17 @@ export const cancelBooking = async (req, res) => {
     booking.cancelledAt = new Date();
     booking.refundAmount = refundPercentage > 0 ? refundAmount : 0;
     booking.refundPercentage = refundPercentage;
-    
+
+    // Add to cancellation history
+    if (!booking.cancellationHistory) booking.cancellationHistory = [];
+    booking.cancellationHistory.push({
+      cancelledAt: booking.cancelledAt,
+      reason: booking.cancelReason,
+      refundAmount: booking.refundAmount,
+      refundPercentage: booking.refundPercentage,
+      cancelledBy: req.user?.userId || req.user?.email || 'unknown'
+    });
+
     await booking.save();
     
     // Send cancellation confirmation email if possible
