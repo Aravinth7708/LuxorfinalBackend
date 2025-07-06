@@ -59,6 +59,7 @@ app.use(cors({
       'https://luxor-omega.vercel.app', 
       'http://localhost:5176',
       'https://www.luxorholidayhomestays.com',
+      'https://luxorholidayhomesstays.vercel.app',
       
       undefined  // Allow requests with no origin (like mobile apps, curl, etc)
     ];
