@@ -702,3 +702,78 @@ export const checkAvailability = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Get all bookings (admin only)
+export const getAllBookings = async (req, res) => {
+  try {
+    console.log("[BOOKING] Admin requesting all bookings");
+    
+    // Optional query parameters for filtering
+    const { status, startDate, endDate, sort } = req.query;
+    
+    // Build query object
+    const query = {};
+    
+    // Filter by status if provided
+    if (status) {
+      query.status = status;
+    }
+    
+    // Filter by date range if provided
+    if (startDate || endDate) {
+      query.$or = [];
+      
+      if (startDate) {
+        query.$or.push({
+          checkIn: { $gte: new Date(startDate) }
+        });
+      }
+      
+      if (endDate) {
+        query.$or.push({
+          checkOut: { $lte: new Date(endDate) }
+        });
+      }
+    }
+    
+    // Create sort object
+    let sortOption = { createdAt: -1 }; // Default sort by creation date (newest first)
+    
+    if (sort) {
+      switch (sort) {
+        case 'date-asc':
+          sortOption = { checkIn: 1 };
+          break;
+        case 'date-desc':
+          sortOption = { checkIn: -1 };
+          break;
+        case 'price-asc':
+          sortOption = { totalAmount: 1 };
+          break;
+        case 'price-desc':
+          sortOption = { totalAmount: -1 };
+          break;
+      }
+    }
+    
+    const bookings = await Booking.find(query)
+      .sort(sortOption)
+      .lean();
+    
+    console.log(`[BOOKING] Retrieved ${bookings.length} bookings for admin`);
+    
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings
+    });
+    
+  } catch (err) {
+    console.error("[BOOKING] Error in getAllBookings:", err);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch bookings',
+      message: err.message 
+    });
+  }
+};

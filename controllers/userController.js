@@ -5,33 +5,39 @@ import jwt from 'jsonwebtoken';
 // Register a new user
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
     
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'User already exists with this email' });
+      return res.status(400).json({ error: 'User already exists' });
     }
-    
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     // Create new user
-    const user = new User({ name, email, password });
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || 'user',
+      isVerified: true
+    });
+
     await user.save();
-    
-    // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    
-    res.status(201).json({ 
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email
-      }
+
+    res.status(201).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isVerified: user.isVerified
     });
   } catch (err) {
-    console.error('Register error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in registerUser: ', err);
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
@@ -40,119 +46,188 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Find user by email
+    // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
-    
-    // Check password
-    const isPasswordMatch = await bcrypt.compare(password, user.password);
-    if (!isPasswordMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
-    
-    // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    
+
+    // Generate token
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
     res.json({
-      success: true,
       token,
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in loginUser: ', err);
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
-// Sync user data (for clerk auth)
-export const syncUser = async (req, res) => {
+// Get all users - NEW
+export const getAllUsers = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    
-    // Find user
-    const user = await User.findOne({ email });
-    
-    // Check if user exists
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    
-    // Check password (in production use proper comparison with hashed passwords)
-    if (password !== user.password) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
-    );
-    
-    // Return user without password
-    const userWithoutPassword = {
-      _id: user._id,
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      createdAt: user.createdAt
-    };
-    
-    res.json({ 
-      success: true, 
-      token, 
-      user: userWithoutPassword
-    });
+    const users = await User.find().select('-password');
+    res.json(users);
   } catch (err) {
-    console.error("Error in loginUser:", err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in getAllUsers: ', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Get user by ID - NEW
+export const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('Error in getUserById: ', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Update user role - NEW
+export const updateUserRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    
+    if (!['user', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('Error in updateUserRole: ', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Delete user - NEW
+export const deleteUser = async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('Error in deleteUser: ', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Update user details - NEW
+export const updateUser = async (req, res) => {
+  try {
+    const { name, email, isVerified } = req.body;
+    
+    // Build update object
+    const updateObj = {};
+    if (name) updateObj.name = name;
+    if (email) updateObj.email = email;
+    if (isVerified !== undefined) updateObj.isVerified = isVerified;
+    
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      updateObj,
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('Error in updateUser: ', err);
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
 // Get user profile
 export const getUserProfile = async (req, res) => {
   try {
-    // Verify token and get userId from it
-    const authHeader = req.headers.authorization;
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error('Error in getUserProfile: ', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Sync user data (for auth)
+export const syncUser = async (req, res) => {
+  try {
+    const { email, name } = req.body;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized - No token provided' });
+    let user = await User.findOne({ email });
+    
+    if (!user) {
+      user = new User({
+        email,
+        name,
+        isVerified: true,
+        role: 'user',
+        password: await bcrypt.hash(Math.random().toString(36).slice(-8), 12)
+      });
+      await user.save();
     }
     
-    const token = authHeader.split(' ')[1];
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
     
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      const userId = decoded.userId;
-    
-      const user = await User.findById(userId);
-      
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      // Return user without password
-      const userWithoutPassword = {
+    res.json({
+      token,
+      user: {
         _id: user._id,
-        id: user._id,
         name: user.name,
         email: user.email,
-        imageUrl: user.imageUrl,
-        createdAt: user.createdAt
-      };
-      
-      res.json({ user: userWithoutPassword });
-    } catch (err) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
+        role: user.role,
+        isVerified: user.isVerified
+      }
+    });
   } catch (err) {
-    console.error("Error in getUserProfile:", err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in syncUser: ', err);
+    res.status(500).json({ error: 'Server error' });
   }
 };

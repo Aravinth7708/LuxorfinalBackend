@@ -61,7 +61,7 @@ app.use(cors({
       'https://www.luxorholidayhomestays.com',
       'https://luxorholidayhomesstays.vercel.app',
       
-      undefined  // Allow requests with no origin (like mobile apps, curl, etc)
+      undefined  
     ];
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
