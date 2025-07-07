@@ -49,18 +49,18 @@ export const loginUser = async (req, res) => {
     // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(404).json({ error: 'User does not exist', code: 'USER_NOT_FOUND' });
     }
 
     // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(400).json({ error: 'Invalid password', code: 'INVALID_PASSWORD' });
     }
 
     // Generate token
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -197,37 +197,48 @@ export const syncUser = async (req, res) => {
   try {
     const { email, name } = req.body;
     
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    // Find or create user
     let user = await User.findOne({ email });
     
     if (!user) {
+      // Create new user
       user = new User({
         email,
-        name,
+        name: name || email.split('@')[0],
+        isGoogleUser: true,
         isVerified: true,
-        role: 'user',
-        password: await bcrypt.hash(Math.random().toString(36).slice(-8), 12)
+        role: 'user'
       });
+      
       await user.save();
+      console.log(`[AUTH] Created new user via sync: ${user._id}`);
     }
     
+    // Generate token with userId (not id)
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
     
-    res.json({
+    res.status(200).json({
+      success: true,
       token,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        isVerified: user.isVerified
+        isVerified: true
       }
     });
-  } catch (err) {
-    console.error('Error in syncUser: ', err);
+    
+  } catch (error) {
+    console.error('[AUTH] Sync user error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

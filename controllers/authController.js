@@ -4,8 +4,11 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { generateOTP, sendOTPEmail } from '../utils/mailService.js';
+import { OAuth2Client } from 'google-auth-library';
 
 dotenv.config();
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Modified to start registration process with OTP
 export const register = async (req, res) => {
@@ -241,66 +244,129 @@ export const login = async (req, res) => {
   }
 };
 
-// For Google auth, we don't need OTP verification
+// Fix the handleGoogleAuth function to use userId instead of id
 export const handleGoogleAuth = async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, email, name, photoURL } = req.body;
     
-    // Verify Google token
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID
-    });
+    let userEmail, userName, userPicture, googleId;
     
-    const { email, name, picture, sub: googleId } = ticket.getPayload();
+    // Handle different input formats
+    if (email) {
+      userEmail = email;
+      userName = name || email.split('@')[0];
+      userPicture = photoURL;
+      googleId = 'firebase-auth';
+      console.log('[AUTH] Using provided email/name:', userEmail);
+    } 
+    else if (token) {
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: token,
+          audience: process.env.GOOGLE_CLIENT_ID
+        });
+        
+        const payload = ticket.getPayload();
+        userEmail = payload.email;
+        userName = payload.name;
+        userPicture = payload.picture;
+        googleId = payload.sub;
+        console.log('[AUTH] Successfully verified Google token for:', userEmail);
+      } catch (error) {
+        console.error("Error verifying Google token:", error);
+        return res.status(400).json({ error: 'Invalid Google token' });
+      }
+    } else {
+      return res.status(400).json({ error: 'Email or token is required' });
+    }
+    
+    if (!userEmail) {
+      return res.status(400).json({ error: 'No email found in Google auth data' });
+    }
     
     // Check if user exists
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: userEmail });
+    let isNewUser = false;
     
     if (!user) {
+      console.log(`[AUTH] Creating new user for email: ${userEmail}`);
+      isNewUser = true;
+      
       // Create new user
       user = new User({
-        name,
-        email,
-        googleId,
-        profilePicture: picture,
-        isVerified: true, // Google accounts are pre-verified
+        name: userName || userEmail.split('@')[0],
+        email: userEmail,
+        googleId: googleId,
+        profilePicture: userPicture,
+        isVerified: true,
+        isGoogleUser: true,
         role: 'user'
       });
       
-      await user.save();
-    } else {
-      // Update existing user's Google info if needed
-      user.googleId = googleId;
-      user.isVerified = true;
-      if (picture && !user.profilePicture) {
-        user.profilePicture = picture;
+      try {
+        await user.save();
+        console.log(`[AUTH] Successfully created new Google user with ID: ${user._id}`);
+      } catch (saveError) {
+        console.error('[AUTH] Error saving new Google user:', saveError);
+        return res.status(500).json({ error: 'Failed to create user account' });
       }
-      await user.save();
+    } else {
+      // Update existing user with Google info if needed
+      let needsUpdate = false;
+      
+      if (!user.googleId && googleId) {
+        user.googleId = googleId;
+        needsUpdate = true;
+      }
+      
+      if (!user.isVerified) {
+        user.isVerified = true;
+        needsUpdate = true;
+      }
+      
+      if (!user.profilePicture && userPicture) {
+        user.profilePicture = userPicture;
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
+        await user.save();
+        console.log(`[AUTH] Updated existing user with Google info: ${user._id}`);
+      }
     }
     
-    // Generate JWT token with correct algorithm
+    // Generate JWT token - FIX HERE by using userId instead of id
     const jwtToken = jwt.sign(
-      { userId: user._id },
+      { userId: user._id, role: user.role }, // Change to userId here
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
     
-    res.status(200).json({
+    console.log(`[AUTH] Successful Google auth for user: ${user._id} (${user.email}), role: ${user.role}`);
+    
+    // Return user data and token
+    return res.status(200).json({
       token: jwtToken,
+      success: true,
+      isNewUser,
+      isAdmin: user.role === 'admin',
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
         profilePicture: user.profilePicture,
-        isVerified: user.isVerified
+        isVerified: true
       }
     });
     
   } catch (error) {
-    console.error('Google auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('[AUTH] Google auth error:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Authentication failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -525,5 +591,50 @@ export const changePassword = async (req, res) => {
   } catch (err) {
     console.error('Error in changePassword:', err);
     return res.status(500).json({ error: err.message });
+  }
+};
+
+export const verifyToken = async (req, res) => {
+  try {
+    // The authMiddleware already verified the token and added user to req
+    // So if we get here, the token is valid
+    const userId = req.user?.userId || req.user?._id;
+    
+    if (!userId) {
+      console.log('[AUTH] Missing userId in verified token');
+      return res.status(401).json({ 
+        error: 'Authentication failed', 
+        details: 'Invalid user information' 
+      });
+    }
+    
+    // Get fresh user data
+    const user = await User.findById(userId).select('-password');
+    
+    if (!user) {
+      console.log(`[AUTH] User not found for verified userId: ${userId}`);
+      return res.status(401).json({ 
+        error: 'Authentication failed', 
+        details: 'User not found' 
+      });
+    }
+    
+    // Log successful verification
+    console.log(`[AUTH] Token verified for user: ${user._id} (${user.email})`);
+    
+    // Return user data
+    return res.status(200).json({ 
+      success: true, 
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified || true
+      }
+    });
+  } catch (error) {
+    console.error('[AUTH] Error in verifyToken:', error);
+    return res.status(500).json({ error: 'Server error' });
   }
 };

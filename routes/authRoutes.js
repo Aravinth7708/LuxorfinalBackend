@@ -24,6 +24,7 @@ router.post('/resend-otp', authController.resendOTP);
 router.get('/profile', authMiddleware, authController.getProfile);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.post('/change-password', authMiddleware, authController.changePassword);
+router.get('/verify-token', authMiddleware, authController.verifyToken);
 
 // Export router
 export default router;

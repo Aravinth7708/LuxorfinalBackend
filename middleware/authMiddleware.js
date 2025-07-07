@@ -33,6 +33,8 @@ const verifyGoogleToken = async (token) => {
         throw new Error('User not found');
       }
       
+      console.log(`[AUTH] Found user with ID ${user._id} for email ${payload.email}`);
+      
       return {
         userId: user._id,
         email: user.email,
@@ -50,6 +52,7 @@ const verifyGoogleToken = async (token) => {
   }
 };
 
+// Update authMiddleware to log more detailed information and handle undefined userId
 export const authMiddleware = async (req, res, next) => {
   try {
     // Get token from header
@@ -84,18 +87,37 @@ export const authMiddleware = async (req, res, next) => {
       
       if (googleUser) {
         // If Google token verification successful
+        if (!googleUser.userId) {
+          console.log("[AUTH] Google verification successful but missing userId");
+          return res.status(401).json({
+            error: 'Authentication failed',
+            details: 'Invalid user information'
+          });
+        }
+        
         req.user = googleUser;
         console.log(`[AUTH] Google user authenticated: ${googleUser.userId} (${googleUser.email})`);
         return next();
       }
       
       // If not a Google token, verify as a regular JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Check if decoded token has userId or id
+      const userIdToUse = decoded.userId || decoded.id;
+      
+      if (!userIdToUse) {
+        console.log('[AUTH] JWT verification successful but missing userId/id in payload:', decoded);
+        return res.status(401).json({
+          error: 'Authentication failed',
+          details: 'Invalid token format'
+        });
+      }
       
       // Check if user exists
-      const user = await User.findById(decoded.userId);
+      const user = await User.findById(userIdToUse);
       if (!user) {
-        console.log(`[AUTH] User not found for userId: ${decoded.userId}`);
+        console.log(`[AUTH] User not found for userId: ${userIdToUse}`);
         return res.status(401).json({ 
           error: 'Authentication failed',
           details: 'User not found' 
@@ -106,7 +128,8 @@ export const authMiddleware = async (req, res, next) => {
       req.user = {
         userId: user._id,
         email: user.email,
-        role: user.role || 'user'
+        role: user.role || 'user',
+        name: user.name
       };
       
       console.log(`[AUTH] User authenticated: ${user._id} (${user.email})`);
@@ -130,8 +153,10 @@ export const authMiddleware = async (req, res, next) => {
   }
 };
 
-// Admin middleware - verify user is admin
-export const adminMiddleware = (req, res, next) => {
+// Ensure proper export of protect and admin
+export const protect = authMiddleware;
+
+export const admin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();
   } else {
@@ -142,68 +167,7 @@ export const adminMiddleware = (req, res, next) => {
   }
 };
 
-// Protect middleware - ensure user is authenticated
-export const protect = async (req, res, next) => {
-  try {
-    // Get token from header
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log("[AUTH] No Authorization header or invalid format");
-      return res.status(401).json({ 
-        error: 'Authentication failed',
-        details: 'No authorization header' 
-      });
-    }
-    
-    const token = authHeader.split(' ')[1];
-    
-    if (!token) {
-      console.log("[AUTH] No token extracted from Authorization header");
-      return res.status(401).json({ 
-        error: 'Authentication failed',
-        details: 'Invalid token format' 
-      });
-    }
-    
-    // Log token for debugging (truncated for security)
-    const truncatedToken = token.length > 10 ? 
-      `${token.substring(0, 10)}...` : 'invalid-token';
-    console.log(`[AUTH] Validating token: ${truncatedToken}`);
-    
-    // Verify token
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      
-      // Check if user exists
-      const user = await User.findById(decoded.userId || decoded.id);
-      if (!user) {
-        console.log(`[AUTH] User not found for userId: ${decoded.userId || decoded.id}`);
-        return res.status(401).json({ 
-          error: 'Authentication failed',
-          details: 'User not found' 
-        });
-      }
-      
-      // Attach user to request
-      req.user = user;
-      next();
-    } catch (jwtError) {
-      console.log(`[AUTH] JWT verification failed: ${jwtError.message}`);
-      return res.status(401).json({ 
-        error: 'Authentication failed',
-        details: 'Invalid token' 
-      });
-    }
-  } catch (error) {
-    console.error(`[AUTH] Unexpected error: ${error.message}`);
-    res.status(500).json({ 
-      error: 'Server error',
-      details: 'Authentication failed due to server error' 
-    });
-  }
-};
-
-export const admin = adminMiddleware; // Export admin as alias for backward compatibility
+export const adminMiddleware = admin; // Export alias
 
 
 
