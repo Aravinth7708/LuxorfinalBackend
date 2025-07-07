@@ -201,24 +201,39 @@ export const syncUser = async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
     
+    // Check if this is an admin email
+    const isAdminEmail = email === 'luxorholidayhomestays@gmail.com';
+    
     // Find or create user
     let user = await User.findOne({ email });
     
     if (!user) {
-      // Create new user
+      // Create new user with a random password for Google users
+      // since the password field is required by the model
+      const randomPassword = Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+      
       user = new User({
         email,
         name: name || email.split('@')[0],
+        password: hashedPassword, // Add this to satisfy the model validation
         isGoogleUser: true,
         isVerified: true,
-        role: 'user'
+        role: isAdminEmail ? 'admin' : 'user' // Set admin role for specific email
       });
       
       await user.save();
-      console.log(`[AUTH] Created new user via sync: ${user._id}`);
+      console.log(`[AUTH] Created new Google user: ${email}, Role: ${user.role}`);
+    } else {
+      // If user exists but needs role update
+      if (isAdminEmail && user.role !== 'admin') {
+        user.role = 'admin';
+        await user.save();
+        console.log(`[AUTH] Updated user to admin role: ${email}`);
+      }
     }
     
-    // Generate token with userId (not id)
+    // Generate token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -228,6 +243,7 @@ export const syncUser = async (req, res) => {
     res.status(200).json({
       success: true,
       token,
+      isAdmin: user.role === 'admin',
       user: {
         _id: user._id,
         name: user.name,
