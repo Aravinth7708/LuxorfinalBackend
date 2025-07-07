@@ -6,6 +6,11 @@ import connectDB from './utils/dbConnect.js';
 
 dotenv.config();
 
+if (!process.env.JWT_SECRET) {
+  console.error('ERROR: JWT_SECRET environment variable is not set!');
+  process.exit(1);
+}
+
 import userRoutes from './routes/userRoutes.js';
 import villaRoutes from './routes/villaRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
@@ -13,6 +18,7 @@ import authRoutes from './routes/authRoutes.js';
 import photoGalleryRoutes from './routes/photoGalleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
+import profileRoutes from './routes/profileRoutes.js';
 
 import paymentRoutes from './routes/paymentRoutes.js';
 connectDB()
@@ -109,7 +115,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/photo-gallery', photoGalleryRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
-
+app.use('/api', profileRoutes);
 
 // ...middleware and other routes...
 

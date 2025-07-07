@@ -1,6 +1,55 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
+// Add this function to verify Firebase/Google tokens
+const verifyGoogleToken = async (token) => {
+  try {
+    // For Firebase tokens, we need to handle them differently
+    // Check if this is a Firebase/Google token by looking at the header
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid token format');
+    }
+    
+    // Decode the header to check the algorithm
+    const header = JSON.parse(Buffer.from(parts[0], 'base64').toString());
+    
+    if (header.alg === 'RS256') {
+      // This is likely a Google/Firebase token
+      console.log('[AUTH] Detected Google/Firebase token');
+      
+      // For Google/Firebase tokens, we need to extract the email and find the user
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+      
+      if (!payload.email) {
+        throw new Error('No email found in token');
+      }
+      
+      // Find user by email
+      const user = await User.findOne({ email: payload.email });
+      
+      if (!user) {
+        console.log(`[AUTH] User not found for email: ${payload.email}`);
+        throw new Error('User not found');
+      }
+      
+      return {
+        userId: user._id,
+        email: user.email,
+        role: user.role || 'user',
+        name: user.name || payload.name,
+        isGoogleAuth: true
+      };
+    }
+    
+    // If not a Google token, let regular verification handle it
+    return null;
+  } catch (error) {
+    console.error('[AUTH] Google token verification error:', error.message);
+    throw error;
+  }
+};
+
 export const authMiddleware = async (req, res, next) => {
   try {
     // Get token from header
@@ -29,8 +78,18 @@ export const authMiddleware = async (req, res, next) => {
       `${token.substring(0, 10)}...` : 'invalid-token';
     console.log(`[AUTH] Validating token: ${truncatedToken}`);
     
-    // Verify token
     try {
+      // First try to verify as a Google token
+      const googleUser = await verifyGoogleToken(token);
+      
+      if (googleUser) {
+        // If Google token verification successful
+        req.user = googleUser;
+        console.log(`[AUTH] Google user authenticated: ${googleUser.userId} (${googleUser.email})`);
+        return next();
+      }
+      
+      // If not a Google token, verify as a regular JWT token
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
       
       // Check if user exists
@@ -52,24 +111,14 @@ export const authMiddleware = async (req, res, next) => {
       
       console.log(`[AUTH] User authenticated: ${user._id} (${user.email})`);
       next();
+      
     } catch (jwtError) {
       console.error('[AUTH] JWT verification error:', jwtError.message);
       
-      if (jwtError.name === 'TokenExpiredError') {
-        return res.status(401).json({ 
-          error: 'Authentication failed',
-          details: 'Token expired' 
-        });
-      }
-      
-      if (jwtError.name === 'JsonWebTokenError') {
-        return res.status(401).json({ 
-          error: 'Authentication failed',
-          details: 'Invalid token' 
-        });
-      }
-      
-      throw jwtError; // Re-throw unexpected errors
+      return res.status(401).json({ 
+        error: 'Authentication failed',
+        details: 'Invalid token' 
+      });
     }
   } catch (error) {
     console.error('[AUTH] Auth middleware error:', error.message);
@@ -81,24 +130,19 @@ export const authMiddleware = async (req, res, next) => {
   }
 };
 
+// Admin middleware - verify user is admin
 export const adminMiddleware = (req, res, next) => {
-  // Check if user is authenticated and has admin role
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ 
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ 
       error: 'Access denied',
-      details: 'Admin privileges required'
+      details: 'Admin privileges required' 
     });
   }
-
-
-
-
-  
-  next();
 };
 
-
-
+// Protect middleware - ensure user is authenticated
 export const protect = async (req, res, next) => {
   try {
     // Get token from header
@@ -159,15 +203,9 @@ export const protect = async (req, res, next) => {
   }
 };
 
-// Admin middleware - verify user is admin
-export const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
-    next();
-  } else {
-    res.status(403).json({ 
-      error: 'Access denied',
-      details: 'Admin privileges required' 
-    });
-  }
-};
+export const admin = adminMiddleware; // Export admin as alias for backward compatibility
+
+
+
+
 

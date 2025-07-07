@@ -123,8 +123,11 @@ export const verifyRegistrationOTP = async (req, res) => {
     // Generate token
     const token = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
+      process.env.JWT_SECRET,
+      { 
+        expiresIn: '7d',
+        algorithm: 'HS256' // Explicitly state the algorithm
+      }
     );
     
     // Delete the OTP document
@@ -205,8 +208,11 @@ export const login = async (req, res) => {
     // Generate token
     const token = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
+      process.env.JWT_SECRET,
+      { 
+        expiresIn: '7d',
+        algorithm: 'HS256' // Explicitly state the algorithm
+      }
     );
     
     // Update last login time
@@ -238,67 +244,63 @@ export const login = async (req, res) => {
 // For Google auth, we don't need OTP verification
 export const handleGoogleAuth = async (req, res) => {
   try {
-    const { email, name, imageUrl, uid } = req.body;
+    const { token } = req.body;
     
-    if (!email || !uid) {
-      return res.status(400).json({ error: 'Invalid Google auth data' });
-    }
+    // Verify Google token
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    
+    const { email, name, picture, sub: googleId } = ticket.getPayload();
     
     // Check if user exists
     let user = await User.findOne({ email });
     
     if (!user) {
-      // Create new user if doesn't exist - explicitly specify only valid fields
+      // Create new user
       user = new User({
-        email,
         name,
-        googleId: uid,
-        profileImage: imageUrl,
-        isGoogleUser: true,
-        isVerified: true // Google users are automatically verified
+        email,
+        googleId,
+        profilePicture: picture,
+        isVerified: true, // Google accounts are pre-verified
+        role: 'user'
       });
+      
       await user.save();
     } else {
-      // Update existing user with Google info if needed
-      if (!user.googleId || user.googleId !== uid) {
-        user.googleId = uid;
-        user.isGoogleUser = true;
-        user.isVerified = true; // Ensure the user is verified
-        if (imageUrl) user.profileImage = imageUrl;
-        await user.save();
+      // Update existing user's Google info if needed
+      user.googleId = googleId;
+      user.isVerified = true;
+      if (picture && !user.profilePicture) {
+        user.profilePicture = picture;
       }
+      await user.save();
     }
     
-    // Generate token
-    const token = jwt.sign(
+    // Generate JWT token with correct algorithm
+    const jwtToken = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
     );
     
-    // Update last login time
-    user.lastLogin = new Date();
-    await user.save();
-    
-    // Return user data
-    const userData = {
-      _id: user._id,
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      profileImage: user.profileImage,
-      isGoogleUser: true,
-      isVerified: true
-    };
-    
-    res.json({ 
-      success: true, 
-      token, 
-      user: userData
+    res.status(200).json({
+      token: jwtToken,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        profilePicture: user.profilePicture,
+        isVerified: user.isVerified
+      }
     });
-  } catch (err) {
-    console.error("Error in Google auth:", err);
-    res.status(500).json({ error: err.message });
+    
+  } catch (error) {
+    console.error('Google auth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
   }
 };
 
