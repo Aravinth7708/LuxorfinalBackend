@@ -58,8 +58,8 @@ app.use((req, res, next) => {
 
 // Enhanced CORS configuration with better error handling
 app.use(cors({
-  origin: function(origin, callback) {
-    const allowedOrigins = [
+  origin:
+    [
       'http://localhost:5173', 
       'http://localhost:5174',
       'https://luxor-omega.vercel.app', 
@@ -68,21 +68,16 @@ app.use(cors({
       'https://luxorholidayhomesstays.vercel.app',
       
       undefined  
-    ];
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log(`CORS blocked origin: ${origin}`);
-      callback(null, false);
-    }
-  },
-  credentials: true,
-  exposedHeaders: ['Content-Range', 'X-Total-Count'],
+    ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
-  maxAge: 86400,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  credentials: true,
+  exposedHeaders: ['Content-Range', 'X-Total-Count'],
+  maxAge: 86400, // Cache preflight response for 24 hours
+  optionsSuccessStatus: 204, // Use 204 for successful OPTIONS requests
+
 }));
 
 app.use(express.json({ limit: '2mb' })); // Increase JSON payload limit
