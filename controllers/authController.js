@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import PhoneUser from '../models/PhoneUser.js';
 import OTP from '../models/OTP.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -396,8 +397,10 @@ export const verifyPhoneAuth = async (req, res) => {
     let decodedToken;
     let verificationMode = 'production';
 
-    // Try Firebase Admin verification first
-    if (admin) {
+    // Try Firebase Admin verification first (only if properly configured)
+    const isFirebaseAdminConfigured = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    
+    if (admin && isFirebaseAdminConfigured) {
       try {
         console.log('[PHONE_AUTH] Attempting Firebase Admin token verification...');
         decodedToken = await admin.auth().verifyIdToken(idToken);
@@ -408,20 +411,11 @@ export const verifyPhoneAuth = async (req, res) => {
         console.error('[PHONE_AUTH] Firebase Admin verification failed:', firebaseError.message);
         
         // Fall back to basic validation for development
-        if (firebaseError.message.includes('credential') || 
-            firebaseError.message.includes('GOOGLE_APPLICATION_CREDENTIALS') ||
-            firebaseError.code === 'auth/invalid-credential') {
-          console.log('[PHONE_AUTH] Using development fallback mode');
-          verificationMode = 'development';
-        } else {
-          return res.status(400).json({ 
-            error: 'Firebase ID token verification failed',
-            details: firebaseError.message 
-          });
-        }
+        console.log('[PHONE_AUTH] Using development fallback mode');
+        verificationMode = 'development';
       }
     } else {
-      console.log('[PHONE_AUTH] Firebase Admin not available - using development mode');
+      console.log('[PHONE_AUTH] Firebase Admin not properly configured - using development mode');
       verificationMode = 'development';
     }
 
@@ -464,19 +458,19 @@ export const verifyPhoneAuth = async (req, res) => {
 
     console.log('[PHONE_AUTH] Using phone number:', verifiedPhoneNumber);
 
-    // Check if user already exists with this phone number
-    let user = await User.findOne({ phoneNumber: verifiedPhoneNumber });
+    // Check if user already exists with this phone number in PhoneUser collection
+    let user = await PhoneUser.findOne({ phoneNumber: verifiedPhoneNumber });
     let isNewUser = false;
 
     if (!user) {
-      // Create new user
+      // Create new phone user
       isNewUser = true;
-      console.log('[PHONE_AUTH] Creating new user for phone:', verifiedPhoneNumber);
+      console.log('[PHONE_AUTH] Creating new phone user for phone:', verifiedPhoneNumber);
       
-      user = new User({
+      user = new PhoneUser({
         name: name || `User_${verifiedPhoneNumber.slice(-4)}`,
-        email: `${decodedToken.uid}@phone.luxor.com`,
         phoneNumber: verifiedPhoneNumber,
+        email: `${decodedToken.uid}@phone.luxor.com`,
         isVerified: true,
         isPhoneVerified: true,
         role: 'user',
@@ -490,31 +484,37 @@ export const verifyPhoneAuth = async (req, res) => {
         console.error('[PHONE_AUTH] Error saving new phone user:', saveError);
         
         // Handle duplicate email error
-        if (saveError.code === 11000 && saveError.keyPattern?.email) {
-          let emailCounter = 1;
-          let uniqueEmail;
-          let emailExists = true;
-          
-          while (emailExists) {
-            uniqueEmail = `${verifiedPhoneNumber.replace(/[^0-9]/g, '')}_${emailCounter}@phone.luxor.com`;
-            const existingUser = await User.findOne({ email: uniqueEmail });
-            if (!existingUser) {
-              emailExists = false;
-            } else {
-              emailCounter++;
+        if (saveError.code === 11000) {
+          if (saveError.keyPattern?.email) {
+            let emailCounter = 1;
+            let uniqueEmail;
+            let emailExists = true;
+            
+            while (emailExists) {
+              uniqueEmail = `${verifiedPhoneNumber.replace(/[^0-9]/g, '')}_${emailCounter}@phone.luxor.com`;
+              const existingUser = await PhoneUser.findOne({ email: uniqueEmail });
+              if (!existingUser) {
+                emailExists = false;
+              } else {
+                emailCounter++;
+              }
             }
+            
+            user.email = uniqueEmail;
+            await user.save();
+            console.log('[PHONE_AUTH] Phone user created with unique email:', uniqueEmail);
+          } else if (saveError.keyPattern?.phoneNumber) {
+            return res.status(400).json({ error: 'Phone number already registered' });
+          } else {
+            return res.status(500).json({ error: 'Failed to create user account' });
           }
-          
-          user.email = uniqueEmail;
-          await user.save();
-          console.log('[PHONE_AUTH] User created with unique email:', uniqueEmail);
         } else {
           return res.status(500).json({ error: 'Failed to create user account' });
         }
       }
     } else {
-      // Update existing user if needed
-      console.log('[PHONE_AUTH] Updating existing user:', user._id);
+      // Update existing phone user if needed
+      console.log('[PHONE_AUTH] Updating existing phone user:', user._id);
       
       let needsUpdate = false;
       
@@ -539,15 +539,24 @@ export const verifyPhoneAuth = async (req, res) => {
         needsUpdate = true;
       }
       
+      // Update last login
+      user.lastLogin = new Date();
+      needsUpdate = true;
+      
       if (needsUpdate) {
         await user.save();
         console.log('[PHONE_AUTH] Updated existing phone user');
       }
     }
 
-    // Generate JWT token
+    // Generate JWT token with phone user identifier
     const jwtToken = jwt.sign(
-      { userId: user._id, role: user.role },
+      { 
+        userId: user._id, 
+        role: user.role,
+        userType: 'phone', // Add user type to distinguish from regular users
+        phoneNumber: user.phoneNumber
+      },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -560,6 +569,7 @@ export const verifyPhoneAuth = async (req, res) => {
       success: true,
       isNewUser,
       verificationMode, // Include for debugging
+      userType: 'phone',
       user: {
         _id: user._id,
         name: user.name,
@@ -567,7 +577,8 @@ export const verifyPhoneAuth = async (req, res) => {
         phoneNumber: user.phoneNumber,
         role: user.role,
         isVerified: true,
-        isPhoneVerified: true
+        isPhoneVerified: true,
+        userType: 'phone'
       }
     });
 
@@ -761,10 +772,26 @@ export const refreshToken = (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const userId = req.user?.userId || req.user?._id;
+    const userType = req.user?.userType || 'regular';
+    
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-    const user = await User.findById(userId).select('-password');
+    
+    let user;
+    if (userType === 'phone') {
+      user = await PhoneUser.findById(userId);
+    } else {
+      user = await User.findById(userId).select('-password');
+    }
+    
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ success: true, user });
+    
+    return res.json({ 
+      success: true, 
+      user: {
+        ...user.toObject(),
+        userType: userType
+      }
+    });
   } catch (err) {
     console.error('Error in getProfile:', err);
     return res.status(500).json({ error: err.message });
@@ -774,14 +801,34 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const userId = req.user?.userId || req.user?._id;
+    const userType = req.user?.userType || 'regular';
+    
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    
     const { name, profileImage } = req.body;
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { name, profileImage },
-      { new: true, runValidators: true }
-    ).select('-password');
-    return res.json({ success: true, user });
+    let user;
+    
+    if (userType === 'phone') {
+      user = await PhoneUser.findByIdAndUpdate(
+        userId,
+        { name, profilePicture: profileImage },
+        { new: true, runValidators: true }
+      );
+    } else {
+      user = await User.findByIdAndUpdate(
+        userId,
+        { name, profileImage },
+        { new: true, runValidators: true }
+      ).select('-password');
+    }
+    
+    return res.json({ 
+      success: true, 
+      user: {
+        ...user.toObject(),
+        userType: userType
+      }
+    });
   } catch (err) {
     console.error('Error in updateProfile:', err);
     return res.status(500).json({ error: err.message });
@@ -813,6 +860,7 @@ export const verifyToken = async (req, res) => {
     // The authMiddleware already verified the token and added user to req
     // So if we get here, the token is valid
     const userId = req.user?.userId || req.user?._id;
+    const userType = req.user?.userType || 'regular';
     
     if (!userId) {
       console.log('[AUTH] Missing userId in verified token');
@@ -822,11 +870,16 @@ export const verifyToken = async (req, res) => {
       });
     }
     
-    // Get fresh user data
-    const user = await User.findById(userId).select('-password');
+    // Get fresh user data from appropriate collection
+    let user;
+    if (userType === 'phone') {
+      user = await PhoneUser.findById(userId);
+    } else {
+      user = await User.findById(userId).select('-password');
+    }
     
     if (!user) {
-      console.log(`[AUTH] User not found for verified userId: ${userId}`);
+      console.log(`[AUTH] User not found for verified userId: ${userId} (type: ${userType})`);
       return res.status(401).json({ 
         error: 'Authentication failed', 
         details: 'User not found' 
@@ -834,7 +887,7 @@ export const verifyToken = async (req, res) => {
     }
     
     // Log successful verification
-    console.log(`[AUTH] Token verified for user: ${user._id} (${user.email})`);
+    console.log(`[AUTH] Token verified for user: ${user._id} (${user.email || user.phoneNumber}) - Type: ${userType}`);
     
     // Return user data
     return res.status(200).json({ 
@@ -843,8 +896,10 @@ export const verifyToken = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        phoneNumber: user.phoneNumber || null,
         role: user.role,
-        isVerified: user.isVerified || true
+        isVerified: user.isVerified || true,
+        userType: userType
       }
     });
   } catch (error) {

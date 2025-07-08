@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import PhoneUser from '../models/PhoneUser.js';
 
 // Add this function to verify Firebase/Google tokens
 const verifyGoogleToken = async (token) => {
@@ -114,10 +115,31 @@ export const authMiddleware = async (req, res, next) => {
         });
       }
       
-      // Check if user exists
-      const user = await User.findById(userIdToUse);
+      // Check user type and find user in appropriate collection
+      let user;
+      let userType = decoded.userType || 'regular'; // Default to regular user
+      
+      if (userType === 'phone') {
+        // Look for phone user
+        user = await PhoneUser.findById(userIdToUse);
+        console.log(`[AUTH] Looking for phone user with ID: ${userIdToUse}`);
+      } else {
+        // Look for regular user first
+        user = await User.findById(userIdToUse);
+        console.log(`[AUTH] Looking for regular user with ID: ${userIdToUse}`);
+        
+        // If not found and no userType specified, also check phone users for backward compatibility
+        if (!user && !decoded.userType) {
+          user = await PhoneUser.findById(userIdToUse);
+          if (user) {
+            userType = 'phone';
+            console.log(`[AUTH] Found user in phone collection: ${userIdToUse}`);
+          }
+        }
+      }
+      
       if (!user) {
-        console.log(`[AUTH] User not found for userId: ${userIdToUse}`);
+        console.log(`[AUTH] User not found for userId: ${userIdToUse} (type: ${userType})`);
         return res.status(401).json({ 
           error: 'Authentication failed',
           details: 'User not found' 
@@ -128,11 +150,13 @@ export const authMiddleware = async (req, res, next) => {
       req.user = {
         userId: user._id,
         email: user.email,
+        phoneNumber: user.phoneNumber || null,
         role: user.role || 'user',
-        name: user.name
+        name: user.name,
+        userType: userType
       };
       
-      console.log(`[AUTH] User authenticated: ${user._id} (${user.email})`);
+      console.log(`[AUTH] User authenticated: ${user._id} (${user.email || user.phoneNumber}) - Type: ${userType}`);
       next();
       
     } catch (jwtError) {

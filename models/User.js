@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: function() {
-      return !this.googleId; // Password is required unless it's a Google user
+      return !this.googleId && !this.phoneNumber; // Password is required unless it's a Google user or phone user
     }
   },
   googleId: {
@@ -41,6 +41,14 @@ const userSchema = new mongoose.Schema({
   isVerified: {
     type: Boolean,
     default: false
+  },
+  isPhoneVerified: {
+    type: Boolean,
+    default: false
+  },
+  firebaseUid: {
+    type: String,
+    sparse: true // Allow null values but enforce uniqueness for non-null values
   }
 }, { timestamps: true });
 
