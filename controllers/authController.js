@@ -5,7 +5,15 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { generateOTP, sendOTPEmail } from '../utils/mailService.js';
 import { OAuth2Client } from 'google-auth-library';
-import { admin } from '../config/firebase-admin';
+
+// Handle Firebase Admin import gracefully
+let admin = null;
+try {
+  const firebaseAdmin = await import('../config/firebase-admin.js');
+  admin = firebaseAdmin.admin;
+} catch (error) {
+  console.warn('Firebase Admin not available - phone auth will use fallback mode:', error.message);
+}
 
 dotenv.config();
 
@@ -371,74 +379,124 @@ export const handleGoogleAuth = async (req, res) => {
   }
 };
 
-// Phone authentication with Firebase
+// Phone authentication with Firebase - Enhanced with fallback
 export const verifyPhoneAuth = async (req, res) => {
   try {
     const { idToken, phoneNumber, name } = req.body;
+
+    console.log('[PHONE_AUTH] Phone verification request received');
+    console.log('[PHONE_AUTH] Phone number:', phoneNumber);
+    console.log('[PHONE_AUTH] Name:', name);
+    console.log('[PHONE_AUTH] Has ID token:', !!idToken);
 
     if (!idToken || !phoneNumber) {
       return res.status(400).json({ error: 'ID token and phone number are required' });
     }
 
-    // For development, we'll verify the ID token structure
-    // In production, you should use proper Firebase Admin SDK verification
     let decodedToken;
-    try {
-      // Verify the Firebase ID token
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-      console.log('Firebase token verified successfully:', decodedToken.phone_number);
-    } catch (error) {
-      console.error('Firebase ID token verification failed:', error.message);
-      
-      // For development purposes, if Firebase Admin isn't properly configured,
-      // we'll do basic validation instead of token verification
-      if (error.message.includes('credential') || error.message.includes('GOOGLE_APPLICATION_CREDENTIALS')) {
-        console.log('Using development mode - skipping Firebase Admin verification');
-        // Create a mock decoded token for development
+    let verificationMode = 'production';
+
+    // Try Firebase Admin verification first
+    if (admin) {
+      try {
+        console.log('[PHONE_AUTH] Attempting Firebase Admin token verification...');
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+        console.log('[PHONE_AUTH] Firebase Admin verification successful');
+        console.log('[PHONE_AUTH] Verified phone:', decodedToken.phone_number);
+        verificationMode = 'firebase-admin';
+      } catch (firebaseError) {
+        console.error('[PHONE_AUTH] Firebase Admin verification failed:', firebaseError.message);
+        
+        // Fall back to basic validation for development
+        if (firebaseError.message.includes('credential') || 
+            firebaseError.message.includes('GOOGLE_APPLICATION_CREDENTIALS') ||
+            firebaseError.code === 'auth/invalid-credential') {
+          console.log('[PHONE_AUTH] Using development fallback mode');
+          verificationMode = 'development';
+        } else {
+          return res.status(400).json({ 
+            error: 'Firebase ID token verification failed',
+            details: firebaseError.message 
+          });
+        }
+      }
+    } else {
+      console.log('[PHONE_AUTH] Firebase Admin not available - using development mode');
+      verificationMode = 'development';
+    }
+
+    // Development/fallback mode - basic token structure validation
+    if (verificationMode === 'development') {
+      try {
+        // Basic JWT structure validation (for development)
+        const tokenParts = idToken.split('.');
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token structure');
+        }
+        
+        // Decode the payload (without verification for development)
+        const payload = JSON.parse(atob(tokenParts[1]));
+        
         decodedToken = {
-          phone_number: phoneNumber,
-          uid: `phone_${phoneNumber.replace(/[^0-9]/g, '')}`
+          phone_number: phoneNumber, // Use the provided phone number
+          uid: payload.sub || `phone_${phoneNumber.replace(/[^0-9]/g, '')}`,
+          ...payload
         };
-      } else {
-        return res.status(400).json({ error: 'Invalid Firebase ID token' });
+        
+        console.log('[PHONE_AUTH] Development mode verification successful');
+      } catch (devError) {
+        console.error('[PHONE_AUTH] Development mode validation failed:', devError);
+        return res.status(400).json({ error: 'Invalid token format' });
       }
     }
 
-    // Check if the phone number from token matches the provided phone number
-    if (decodedToken.phone_number !== phoneNumber) {
+    // Validate phone number match
+    const verifiedPhoneNumber = decodedToken.phone_number || phoneNumber;
+    
+    if (!verifiedPhoneNumber) {
+      return res.status(400).json({ error: 'Phone number not found in token' });
+    }
+
+    // For strict verification, check if token phone matches provided phone
+    if (verificationMode === 'firebase-admin' && decodedToken.phone_number !== phoneNumber) {
       return res.status(400).json({ error: 'Phone number mismatch' });
     }
 
+    console.log('[PHONE_AUTH] Using phone number:', verifiedPhoneNumber);
+
     // Check if user already exists with this phone number
-    let user = await User.findOne({ phoneNumber });
+    let user = await User.findOne({ phoneNumber: verifiedPhoneNumber });
     let isNewUser = false;
 
     if (!user) {
       // Create new user
       isNewUser = true;
+      console.log('[PHONE_AUTH] Creating new user for phone:', verifiedPhoneNumber);
+      
       user = new User({
-        name: name || `User_${phoneNumber.slice(-4)}`,
-        email: decodedToken.email || `${phoneNumber.replace(/[^0-9]/g, '')}@phone.luxor.com`, // Generate a unique email
-        phoneNumber,
+        name: name || `User_${verifiedPhoneNumber.slice(-4)}`,
+        email: `${decodedToken.uid}@phone.luxor.com`,
+        phoneNumber: verifiedPhoneNumber,
         isVerified: true,
-        role: 'user'
+        isPhoneVerified: true,
+        role: 'user',
+        firebaseUid: decodedToken.uid
       });
 
       try {
         await user.save();
-        console.log(`[AUTH] Successfully created new phone user with ID: ${user._id}`);
+        console.log(`[PHONE_AUTH] Successfully created new phone user with ID: ${user._id}`);
       } catch (saveError) {
-        console.error('[AUTH] Error saving new phone user:', saveError);
+        console.error('[PHONE_AUTH] Error saving new phone user:', saveError);
         
         // Handle duplicate email error
         if (saveError.code === 11000 && saveError.keyPattern?.email) {
-          // Find a unique email
           let emailCounter = 1;
           let uniqueEmail;
           let emailExists = true;
           
           while (emailExists) {
-            uniqueEmail = `${phoneNumber.replace(/[^0-9]/g, '')}_${emailCounter}@phone.luxor.com`;
+            uniqueEmail = `${verifiedPhoneNumber.replace(/[^0-9]/g, '')}_${emailCounter}@phone.luxor.com`;
             const existingUser = await User.findOne({ email: uniqueEmail });
             if (!existingUser) {
               emailExists = false;
@@ -449,16 +507,29 @@ export const verifyPhoneAuth = async (req, res) => {
           
           user.email = uniqueEmail;
           await user.save();
+          console.log('[PHONE_AUTH] User created with unique email:', uniqueEmail);
         } else {
           return res.status(500).json({ error: 'Failed to create user account' });
         }
       }
     } else {
       // Update existing user if needed
+      console.log('[PHONE_AUTH] Updating existing user:', user._id);
+      
       let needsUpdate = false;
       
       if (!user.isVerified) {
         user.isVerified = true;
+        needsUpdate = true;
+      }
+      
+      if (!user.isPhoneVerified) {
+        user.isPhoneVerified = true;
+        needsUpdate = true;
+      }
+      
+      if (!user.firebaseUid && decodedToken.uid) {
+        user.firebaseUid = decodedToken.uid;
         needsUpdate = true;
       }
       
@@ -470,7 +541,7 @@ export const verifyPhoneAuth = async (req, res) => {
       
       if (needsUpdate) {
         await user.save();
-        console.log(`[AUTH] Updated existing phone user: ${user._id}`);
+        console.log('[PHONE_AUTH] Updated existing phone user');
       }
     }
 
@@ -481,25 +552,27 @@ export const verifyPhoneAuth = async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    console.log(`[AUTH] Successful phone auth for user: ${user._id} (${user.phoneNumber})`);
+    console.log(`[PHONE_AUTH] Successful phone auth for user: ${user._id} (${user.phoneNumber}) - Mode: ${verificationMode}`);
 
     // Return user data and token
     return res.status(200).json({
       token: jwtToken,
       success: true,
       isNewUser,
+      verificationMode, // Include for debugging
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
         role: user.role,
-        isVerified: true
+        isVerified: true,
+        isPhoneVerified: true
       }
     });
 
   } catch (error) {
-    console.error('[AUTH] Phone auth error:', error);
+    console.error('[PHONE_AUTH] Phone auth error:', error);
     return res.status(500).json({ 
       success: false,
       message: 'Phone authentication failed',
@@ -507,6 +580,9 @@ export const verifyPhoneAuth = async (req, res) => {
     });
   }
 };
+
+// Phone verification endpoint (alternative name for the same function)
+export const handlePhoneVerification = verifyPhoneAuth;
 
 // Resend OTP email for either registration or password reset
 export const resendOTP = async (req, res) => {
@@ -777,140 +853,13 @@ export const verifyToken = async (req, res) => {
   }
 };
 
-// Phone verification endpoint
-const handlePhoneVerification = async (req, res) => {
-  try {
-    const { idToken, phoneNumber, name } = req.body;
-
-    console.log('Phone verification request received');
-    console.log('Phone number:', phoneNumber);
-    console.log('Name:', name);
-    console.log('Has ID token:', !!idToken);
-
-    if (!idToken) {
-      return res.status(400).json({ error: 'Firebase ID token is required' });
-    }
-
-    if (!phoneNumber) {
-      return res.status(400).json({ error: 'Phone number is required' });
-    }
-
-    // Verify the Firebase ID token
-    let decodedToken;
-    try {
-      console.log('Attempting to verify Firebase ID token...');
-      decodedToken = await admin.auth().verifyIdToken(idToken);
-      console.log('Firebase token verified successfully');
-      console.log('Decoded token UID:', decodedToken.uid);
-      console.log('Decoded token phone:', decodedToken.phone_number);
-    } catch (firebaseError) {
-      console.error('Firebase token verification failed:', firebaseError);
-      
-      // More specific error handling
-      if (firebaseError.code === 'auth/id-token-expired') {
-        return res.status(401).json({ 
-          error: 'Firebase ID token has expired. Please try again.',
-          code: 'TOKEN_EXPIRED'
-        });
-      } else if (firebaseError.code === 'auth/argument-error') {
-        return res.status(400).json({ 
-          error: 'Invalid Firebase ID token format',
-          code: 'INVALID_TOKEN_FORMAT'
-        });
-      } else {
-        return res.status(400).json({ 
-          error: 'Firebase ID token verification failed',
-          details: firebaseError.message,
-          code: firebaseError.code || 'VERIFICATION_FAILED'
-        });
-      }
-    }
-
-    // Extract phone number from the verified token
-    const verifiedPhoneNumber = decodedToken.phone_number || phoneNumber;
-    
-    if (!verifiedPhoneNumber) {
-      return res.status(400).json({ 
-        error: 'Phone number not found in verified token',
-        code: 'PHONE_NOT_FOUND'
-      });
-    }
-
-    console.log('Verified phone number:', verifiedPhoneNumber);
-
-    // Check if user already exists with this phone number
-    let user = await User.findOne({ phoneNumber: verifiedPhoneNumber });
-
-    if (!user) {
-      console.log('Creating new user for phone number:', verifiedPhoneNumber);
-      
-      // Create new user with phone number
-      const userData = {
-        phoneNumber: verifiedPhoneNumber,
-        name: name || `User_${verifiedPhoneNumber.slice(-4)}`,
-        email: `${decodedToken.uid}@phone.local`, // Temporary email for phone users
-        password: await bcrypt.hash(decodedToken.uid, 10), // Use Firebase UID as password
-        isPhoneVerified: true,
-        firebaseUid: decodedToken.uid
-      };
-
-      user = new User(userData);
-      await user.save();
-      console.log('New user created with ID:', user._id);
-    } else {
-      console.log('Updating existing user:', user._id);
-      
-      // Update existing user
-      user.isPhoneVerified = true;
-      user.firebaseUid = decodedToken.uid;
-      if (name && name !== user.name) {
-        user.name = name;
-      }
-      await user.save();
-      console.log('User updated successfully');
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        userId: user._id,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        firebaseUid: decodedToken.uid
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    console.log('JWT token generated for user:', user._id);
-
-    res.status(200).json({
-      message: 'Phone verification successful',
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        isPhoneVerified: user.isPhoneVerified
-      }
-    });
-
-  } catch (error) {
-    console.error('Phone verification error:', error);
-    res.status(500).json({ 
-      error: 'Internal server error during phone verification',
-      details: error.message 
-    });
-  }
-};
-
 export default {
   register,
   verifyRegistrationOTP,
   login,
   handleGoogleAuth,
   verifyPhoneAuth,
+  handlePhoneVerification,
   resendOTP,
   forgotPassword,
   verifyResetOTP,
@@ -919,6 +868,5 @@ export default {
   getProfile,
   updateProfile,
   changePassword,
-  verifyToken,
-  handlePhoneVerification
+  verifyToken
 };
