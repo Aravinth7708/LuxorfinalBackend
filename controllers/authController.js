@@ -5,22 +5,9 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { generateOTP, sendOTPEmail } from '../utils/mailService.js';
 import { OAuth2Client } from 'google-auth-library';
-import admin from 'firebase-admin';
+import { admin } from '../config/firebase-admin';
 
 dotenv.config();
-
-// Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-  try {
-    // Initialize with minimal config for ID token verification
-    admin.initializeApp({
-      projectId: 'luxorotp',
-    });
-    console.log('Firebase Admin initialized successfully');
-  } catch (error) {
-    console.error('Firebase Admin initialization error:', error);
-  }
-}
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -788,4 +775,150 @@ export const verifyToken = async (req, res) => {
     console.error('[AUTH] Error in verifyToken:', error);
     return res.status(500).json({ error: 'Server error' });
   }
+};
+
+// Phone verification endpoint
+const handlePhoneVerification = async (req, res) => {
+  try {
+    const { idToken, phoneNumber, name } = req.body;
+
+    console.log('Phone verification request received');
+    console.log('Phone number:', phoneNumber);
+    console.log('Name:', name);
+    console.log('Has ID token:', !!idToken);
+
+    if (!idToken) {
+      return res.status(400).json({ error: 'Firebase ID token is required' });
+    }
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Verify the Firebase ID token
+    let decodedToken;
+    try {
+      console.log('Attempting to verify Firebase ID token...');
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+      console.log('Firebase token verified successfully');
+      console.log('Decoded token UID:', decodedToken.uid);
+      console.log('Decoded token phone:', decodedToken.phone_number);
+    } catch (firebaseError) {
+      console.error('Firebase token verification failed:', firebaseError);
+      
+      // More specific error handling
+      if (firebaseError.code === 'auth/id-token-expired') {
+        return res.status(401).json({ 
+          error: 'Firebase ID token has expired. Please try again.',
+          code: 'TOKEN_EXPIRED'
+        });
+      } else if (firebaseError.code === 'auth/argument-error') {
+        return res.status(400).json({ 
+          error: 'Invalid Firebase ID token format',
+          code: 'INVALID_TOKEN_FORMAT'
+        });
+      } else {
+        return res.status(400).json({ 
+          error: 'Firebase ID token verification failed',
+          details: firebaseError.message,
+          code: firebaseError.code || 'VERIFICATION_FAILED'
+        });
+      }
+    }
+
+    // Extract phone number from the verified token
+    const verifiedPhoneNumber = decodedToken.phone_number || phoneNumber;
+    
+    if (!verifiedPhoneNumber) {
+      return res.status(400).json({ 
+        error: 'Phone number not found in verified token',
+        code: 'PHONE_NOT_FOUND'
+      });
+    }
+
+    console.log('Verified phone number:', verifiedPhoneNumber);
+
+    // Check if user already exists with this phone number
+    let user = await User.findOne({ phoneNumber: verifiedPhoneNumber });
+
+    if (!user) {
+      console.log('Creating new user for phone number:', verifiedPhoneNumber);
+      
+      // Create new user with phone number
+      const userData = {
+        phoneNumber: verifiedPhoneNumber,
+        name: name || `User_${verifiedPhoneNumber.slice(-4)}`,
+        email: `${decodedToken.uid}@phone.local`, // Temporary email for phone users
+        password: await bcrypt.hash(decodedToken.uid, 10), // Use Firebase UID as password
+        isPhoneVerified: true,
+        firebaseUid: decodedToken.uid
+      };
+
+      user = new User(userData);
+      await user.save();
+      console.log('New user created with ID:', user._id);
+    } else {
+      console.log('Updating existing user:', user._id);
+      
+      // Update existing user
+      user.isPhoneVerified = true;
+      user.firebaseUid = decodedToken.uid;
+      if (name && name !== user.name) {
+        user.name = name;
+      }
+      await user.save();
+      console.log('User updated successfully');
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user._id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        firebaseUid: decodedToken.uid
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    console.log('JWT token generated for user:', user._id);
+
+    res.status(200).json({
+      message: 'Phone verification successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        isPhoneVerified: user.isPhoneVerified
+      }
+    });
+
+  } catch (error) {
+    console.error('Phone verification error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error during phone verification',
+      details: error.message 
+    });
+  }
+};
+
+export default {
+  register,
+  verifyRegistrationOTP,
+  login,
+  handleGoogleAuth,
+  verifyPhoneAuth,
+  resendOTP,
+  forgotPassword,
+  verifyResetOTP,
+  logout,
+  refreshToken,
+  getProfile,
+  updateProfile,
+  changePassword,
+  verifyToken,
+  handlePhoneVerification
 };
