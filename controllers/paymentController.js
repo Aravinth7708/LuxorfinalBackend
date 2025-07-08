@@ -177,6 +177,90 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
+    // Fetch payment details from Razorpay to get the payment method
+    let paymentMethod = "Online Payment"; // Default fallback
+    let paymentDetails = null;
+    
+    try {
+      console.log("[PAYMENT] Fetching payment details from Razorpay for payment ID:", razorpay_payment_id);
+      paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
+      console.log("[PAYMENT] Payment details from Razorpay:", JSON.stringify(paymentDetails, null, 2));
+      
+      // Extract payment method from Razorpay response
+      if (paymentDetails && paymentDetails.method) {
+        console.log("[PAYMENT] Raw payment method from Razorpay:", paymentDetails.method);
+        
+        switch (paymentDetails.method) {
+          case 'upi':
+            paymentMethod = 'UPI';
+            break;
+          case 'card':
+            paymentMethod = 'Card';
+            break;
+          case 'netbanking':
+            paymentMethod = 'Net Banking';
+            break;
+          case 'wallet':
+            paymentMethod = 'Wallet';
+            break;
+          case 'bank_transfer':
+            paymentMethod = 'Bank Transfer';
+            break;
+          case 'emi':
+            paymentMethod = 'EMI';
+            break;
+          default:
+            paymentMethod = `Online Payment (${paymentDetails.method})`;
+        }
+        
+        // If it's UPI, try to get more specific info
+        if (paymentDetails.method === 'upi' && paymentDetails.acquirer_data && paymentDetails.acquirer_data.upi) {
+          const upiData = paymentDetails.acquirer_data.upi;
+          console.log("[PAYMENT] UPI data:", upiData);
+          if (upiData.vpa) {
+            const upiProvider = upiData.vpa.split('@')[1] || 'UPI';
+            paymentMethod = `UPI (${upiProvider})`;
+          }
+        }
+        
+        // If it's card, get card network
+        if (paymentDetails.method === 'card' && paymentDetails.card) {
+          console.log("[PAYMENT] Card data:", paymentDetails.card);
+          const cardNetwork = paymentDetails.card.network || '';
+          const cardType = paymentDetails.card.type || '';
+          if (cardNetwork && cardType) {
+            paymentMethod = `${cardNetwork} ${cardType} Card`.trim();
+          } else if (cardNetwork) {
+            paymentMethod = `${cardNetwork} Card`;
+          } else {
+            paymentMethod = 'Card';
+          }
+        }
+        
+        // If it's wallet, get wallet name
+        if (paymentDetails.method === 'wallet' && paymentDetails.wallet) {
+          console.log("[PAYMENT] Wallet data:", paymentDetails.wallet);
+          paymentMethod = `Wallet (${paymentDetails.wallet})`;
+        }
+        
+        // If it's netbanking, get bank name
+        if (paymentDetails.method === 'netbanking' && paymentDetails.bank) {
+          console.log("[PAYMENT] Bank data:", paymentDetails.bank);
+          paymentMethod = `Net Banking (${paymentDetails.bank})`;
+        }
+      }
+    } catch (paymentFetchError) {
+      console.error("[PAYMENT] Error fetching payment details from Razorpay:", paymentFetchError);
+      console.error("[PAYMENT] Error details:", {
+        message: paymentFetchError.message,
+        stack: paymentFetchError.stack
+      });
+      // Continue with default payment method
+      console.log("[PAYMENT] Continuing with default payment method:", paymentMethod);
+    }
+
+    console.log("[PAYMENT] Determined payment method:", paymentMethod);
+
     // For test payments, we're using a fixed amount of 10 rupees
     // Modify bookingData to reflect this is a test booking
     const testBookingData = {
@@ -187,6 +271,10 @@ export const verifyPayment = async (req, res) => {
       totalAmount: 10, // Override with 10 rupees
       status: 'confirmed',
       paymentStatus: 'paid',
+      paymentMethod: paymentMethod, // Set the actual payment method
+      isPaid: true, // Mark as paid since payment is successful
+      checkInTime: bookingData.checkInTime || "14:00", // Default to 2:00 PM
+      checkOutTime: bookingData.checkOutTime || "12:00", // Default to 12:00 PM
       createdAt: new Date(),
       isTestBooking: true // Flag to indicate this is a test booking
     };
@@ -196,6 +284,7 @@ export const verifyPayment = async (req, res) => {
     await newBooking.save();
     
     console.log("[PAYMENT] Test booking created successfully:", newBooking._id);
+    console.log("[PAYMENT] Payment method set to:", newBooking.paymentMethod);
 
     // Send booking confirmation email (optional for test bookings)
     try {
@@ -376,12 +465,12 @@ async function sendBookingConfirmation(booking) {
           
           <div class="booking-row">
             <div class="booking-label">Check-in</div>
-            <div class="booking-value">${formattedCheckIn} ${booking.checkInTime || '2:00 PM'}</div>
+            <div class="booking-value">${formattedCheckIn} ${formatTimeFor12Hour(booking.checkInTime)}</div>
           </div>
           
           <div class="booking-row">
             <div class="booking-label">Check-out</div>
-            <div class="booking-value">${formattedCheckOut} ${booking.checkOutTime || '11:00 AM'}</div>
+            <div class="booking-value">${formattedCheckOut} ${formatTimeFor12Hour(booking.checkOutTime)}</div>
           </div>
           
           <div class="booking-row">
@@ -432,7 +521,7 @@ async function sendBookingConfirmation(booking) {
         <div style="padding: 20px 30px;">
           <h3 style="color: #16a34a;">Important Information</h3>
           <ul style="padding-left: 20px;">
-            <li>Please arrive at the property between ${booking.checkInTime || '2:00 PM'} and 8:00 PM on your check-in date.</li>
+            <li>Please arrive at the property between ${formatTimeFor12Hour(booking.checkInTime)} and 8:00 PM on your check-in date.</li>
             <li>A refundable security deposit of ₹20,000 may be collected upon arrival.</li>
             <li>Please have a valid ID ready for check-in.</li>
             <li>For any assistance, please contact us at support@luxorstayvillas.com</li>
@@ -624,6 +713,8 @@ export const handleWebhook = async (req, res) => {
         villaName: notes.villaName,
         checkIn: new Date(notes.checkIn),
         checkOut: new Date(notes.checkOut),
+        checkInTime: notes.checkInTime || "14:00", // Default to 2:00 PM
+        checkOutTime: notes.checkOutTime || "12:00", // Default to 12:00 PM
         guests: parseInt(notes.guests),
         paymentId: paymentId,
         orderId: orderId,
@@ -645,3 +736,22 @@ export const handleWebhook = async (req, res) => {
 
 // Add the webhook route in paymentRoutes.js
 router.post('/webhook', handleWebhook);
+
+// Helper function to format time from 24-hour to 12-hour format
+const formatTimeFor12Hour = (time24) => {
+  if (!time24) return "2:00 PM"; // Default fallback
+  
+  const [hours, minutes] = time24.split(':');
+  const hour = parseInt(hours);
+  const minute = minutes || '00';
+  
+  if (hour === 0) {
+    return `12:${minute} AM`;
+  } else if (hour < 12) {
+    return `${hour}:${minute} AM`;
+  } else if (hour === 12) {
+    return `12:${minute} PM`;
+  } else {
+    return `${hour - 12}:${minute} PM`;
+  }
+};

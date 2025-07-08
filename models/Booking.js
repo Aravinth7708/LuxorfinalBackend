@@ -32,6 +32,14 @@ const bookingSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+    checkInTime: {
+      type: String,
+      default: "14:00", // 2:00 PM in 24-hour format
+    },
+    checkOutTime: {
+      type: String,
+      default: "12:00", // 12:00 PM in 24-hour format
+    },
     guests: {
       type: Number,
       required: true,
@@ -61,6 +69,14 @@ const bookingSchema = new mongoose.Schema(
     isPaid: {
       type: Boolean,
       default: false,
+    },
+    paymentId: {
+      type: String,
+      default: null,
+    },
+    orderId: {
+      type: String,
+      default: null,
     },
     bookingDate: {
       type: Date,

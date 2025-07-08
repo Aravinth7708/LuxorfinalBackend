@@ -7,7 +7,7 @@ export const createBooking = async (req, res) => {
     console.log("[BOOKING] Received booking request:", req.body)
     console.log("[BOOKING] User from auth:", req.user)
 
-    const { villaId, email, guestName, checkIn, checkOut, guests, totalAmount, totalDays, infants } = req.body
+    const { villaId, email, guestName, checkIn, checkOut, checkInTime, checkOutTime, guests, totalAmount, totalDays, infants } = req.body
 
     if (!villaId || !email || !checkIn || !checkOut || !guests) {
       console.error("[BOOKING] Missing required fields", req.body)
@@ -63,6 +63,8 @@ export const createBooking = async (req, res) => {
       guestName,
       checkIn,
       checkOut,
+      checkInTime: checkInTime || "14:00", // Default to 2:00 PM
+      checkOutTime: checkOutTime || "12:00", // Default to 12:00 PM
       guests,
       totalAmount: req.body.totalAmount || totalAmount,
       totalDays: totalDays || calculatedDays,
@@ -561,57 +563,31 @@ export const checkAvailability = async (req, res) => {
 
 export const getAllBookings = async (req, res) => {
   try {
-    console.log("[BOOKING] Admin requesting all bookings")
-    const { status, startDate, endDate, sort } = req.query
-
-    const query = {}
-    if (status) {
-      query.status = status
-    }
-
-    if (startDate || endDate) {
-      query.$or = []
-      if (startDate) {
-        query.$or.push({ checkIn: { $gte: new Date(startDate) } })
-      }
-      if (endDate) {
-        query.$or.push({ checkOut: { $lte: new Date(endDate) } })
-      }
-    }
-
-    let sortOption = { createdAt: -1 }
-    if (sort) {
-      switch (sort) {
-        case "date-asc":
-          sortOption = { checkIn: 1 }
-          break
-        case "date-desc":
-          sortOption = { checkIn: -1 }
-          break
-        case "price-asc":
-          sortOption = { totalAmount: 1 }
-          break
-        case "price-desc":
-          sortOption = { totalAmount: -1 }
-          break
-      }
-    }
-
-    const bookings = await Booking.find(query).sort(sortOption).lean()
-
-    console.log(`[BOOKING] Retrieved ${bookings.length} bookings for admin`)
-
-    res.json({
-      success: true,
-      count: bookings.length,
-      bookings,
-    })
+    const bookings = await Booking.find().populate("villaId").populate("userId")
+    res.json(bookings)
   } catch (err) {
-    console.error("[BOOKING] Error in getAllBookings:", err)
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch bookings",
-      message: err.message,
-    })
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// Get blocked dates for a specific villa
+export const getBlockedDates = async (req, res) => {
+  try {
+    const { villaId } = req.params
+
+    const bookings = await Booking.find({
+      villaId,
+      status: { $in: ["confirmed", "pending"] }, // Only block if not cancelled
+    }).select("checkIn checkOut -_id") // only need dates
+
+    // Convert to an array of date ranges
+    const blockedDates = bookings.map((booking) => ({
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+    }))
+
+    res.status(200).json({ blockedDates })
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching blocked dates", error: err.message })
   }
 }
