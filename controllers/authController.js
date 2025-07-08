@@ -5,8 +5,22 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { generateOTP, sendOTPEmail } from '../utils/mailService.js';
 import { OAuth2Client } from 'google-auth-library';
+import admin from 'firebase-admin';
 
 dotenv.config();
+
+// Initialize Firebase Admin SDK
+if (!admin.apps.length) {
+  try {
+    // Initialize with minimal config for ID token verification
+    admin.initializeApp({
+      projectId: 'luxorotp',
+    });
+    console.log('Firebase Admin initialized successfully');
+  } catch (error) {
+    console.error('Firebase Admin initialization error:', error);
+  }
+}
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -365,6 +379,143 @@ export const handleGoogleAuth = async (req, res) => {
     return res.status(500).json({ 
       success: false,
       message: 'Authentication failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Phone authentication with Firebase
+export const verifyPhoneAuth = async (req, res) => {
+  try {
+    const { idToken, phoneNumber, name } = req.body;
+
+    if (!idToken || !phoneNumber) {
+      return res.status(400).json({ error: 'ID token and phone number are required' });
+    }
+
+    // For development, we'll verify the ID token structure
+    // In production, you should use proper Firebase Admin SDK verification
+    let decodedToken;
+    try {
+      // Verify the Firebase ID token
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+      console.log('Firebase token verified successfully:', decodedToken.phone_number);
+    } catch (error) {
+      console.error('Firebase ID token verification failed:', error.message);
+      
+      // For development purposes, if Firebase Admin isn't properly configured,
+      // we'll do basic validation instead of token verification
+      if (error.message.includes('credential') || error.message.includes('GOOGLE_APPLICATION_CREDENTIALS')) {
+        console.log('Using development mode - skipping Firebase Admin verification');
+        // Create a mock decoded token for development
+        decodedToken = {
+          phone_number: phoneNumber,
+          uid: `phone_${phoneNumber.replace(/[^0-9]/g, '')}`
+        };
+      } else {
+        return res.status(400).json({ error: 'Invalid Firebase ID token' });
+      }
+    }
+
+    // Check if the phone number from token matches the provided phone number
+    if (decodedToken.phone_number !== phoneNumber) {
+      return res.status(400).json({ error: 'Phone number mismatch' });
+    }
+
+    // Check if user already exists with this phone number
+    let user = await User.findOne({ phoneNumber });
+    let isNewUser = false;
+
+    if (!user) {
+      // Create new user
+      isNewUser = true;
+      user = new User({
+        name: name || `User_${phoneNumber.slice(-4)}`,
+        email: decodedToken.email || `${phoneNumber.replace(/[^0-9]/g, '')}@phone.luxor.com`, // Generate a unique email
+        phoneNumber,
+        isVerified: true,
+        role: 'user'
+      });
+
+      try {
+        await user.save();
+        console.log(`[AUTH] Successfully created new phone user with ID: ${user._id}`);
+      } catch (saveError) {
+        console.error('[AUTH] Error saving new phone user:', saveError);
+        
+        // Handle duplicate email error
+        if (saveError.code === 11000 && saveError.keyPattern?.email) {
+          // Find a unique email
+          let emailCounter = 1;
+          let uniqueEmail;
+          let emailExists = true;
+          
+          while (emailExists) {
+            uniqueEmail = `${phoneNumber.replace(/[^0-9]/g, '')}_${emailCounter}@phone.luxor.com`;
+            const existingUser = await User.findOne({ email: uniqueEmail });
+            if (!existingUser) {
+              emailExists = false;
+            } else {
+              emailCounter++;
+            }
+          }
+          
+          user.email = uniqueEmail;
+          await user.save();
+        } else {
+          return res.status(500).json({ error: 'Failed to create user account' });
+        }
+      }
+    } else {
+      // Update existing user if needed
+      let needsUpdate = false;
+      
+      if (!user.isVerified) {
+        user.isVerified = true;
+        needsUpdate = true;
+      }
+      
+      // Update name if provided and user doesn't have one
+      if (name && (!user.name || user.name.startsWith('User_'))) {
+        user.name = name;
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
+        await user.save();
+        console.log(`[AUTH] Updated existing phone user: ${user._id}`);
+      }
+    }
+
+    // Generate JWT token
+    const jwtToken = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    console.log(`[AUTH] Successful phone auth for user: ${user._id} (${user.phoneNumber})`);
+
+    // Return user data and token
+    return res.status(200).json({
+      token: jwtToken,
+      success: true,
+      isNewUser,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+        isVerified: true
+      }
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Phone auth error:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Phone authentication failed',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

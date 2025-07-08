@@ -15,6 +15,9 @@ router.post('/refresh-token', authController.refreshToken);
 // Google authentication (no OTP needed)
 router.post('/google-auth', authController.handleGoogleAuth);
 
+// Phone authentication (Firebase-based)
+router.post('/phone-verify', authController.verifyPhoneAuth);
+
 // Password management with OTP verification
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/verify-reset-otp', authController.verifyResetOTP);

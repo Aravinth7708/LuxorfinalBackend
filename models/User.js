@@ -24,6 +24,12 @@ const userSchema = new mongoose.Schema({
   googleId: {
     type: String
   },
+  phoneNumber: {
+    type: String,
+    unique: true,
+    sparse: true, // Allow null values but enforce uniqueness for non-null values
+    trim: true
+  },
   profilePicture: {
     type: String
   },
