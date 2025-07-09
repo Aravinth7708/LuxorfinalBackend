@@ -1108,6 +1108,9 @@ export const sendEmailVerification = async (req, res) => {
     
     // Check if email is already in use by another user
     try {
+      const User = mongoose.model('User');
+      const PhoneUser = mongoose.model('PhoneUser');
+      
       const existingUser = await User.findOne({ email });
       const existingPhoneUser = await PhoneUser.findOne({ 
         email, 
@@ -1127,29 +1130,38 @@ export const sendEmailVerification = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log('[EMAIL_VERIFY] Generated OTP for email verification:', otp);
     
-    // Store OTP for verification - use try/catch to handle DB errors
+    // Store OTP for verification
     try {
+      const OTP = mongoose.model('OTP');
       await OTP.create({
         email,
         otp,
         purpose: 'phone-email-verification',
-        userData: { name, phoneNumber }
+        userData: { name, phoneNumber },
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes expiration
       });
+      console.log('[EMAIL_VERIFY] OTP stored in database');
     } catch (otpError) {
       console.error('[EMAIL_VERIFY] Error storing OTP:', otpError);
       return res.status(500).json({ error: 'Failed to process verification. Please try again.' });
     }
     
-    // Send OTP email with better error handling
+    // Send OTP email using nodemailer
     try {
+      // Create a transporter with proper configuration
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
           user: process.env.gmail,
           pass: process.env.pass
+        },
+        tls: {
+          rejectUnauthorized: false // For development environments
         }
       });
       
+      // Create mail options
       const mailOptions = {
         from: `"Luxor Stay Homes" <${process.env.gmail}>`,
         to: email,
@@ -1170,8 +1182,11 @@ export const sendEmailVerification = async (req, res) => {
         `
       };
       
-      await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL_VERIFY] OTP email sent successfully to ${email}`);
+      // Send email
+      console.log('[EMAIL_VERIFY] Attempting to send email...');
+      const info = await transporter.sendMail(mailOptions);
+      console.log('[EMAIL_VERIFY] Email sent successfully:', info.messageId);
+      
     } catch (emailError) {
       console.error('[EMAIL_VERIFY] Error sending email:', emailError);
       return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
@@ -1181,6 +1196,7 @@ export const sendEmailVerification = async (req, res) => {
       success: true,
       message: 'Verification code sent to email'
     });
+    
   } catch (error) {
     console.error('[EMAIL_VERIFY] Error sending email verification:', error);
     return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
@@ -1189,29 +1205,36 @@ export const sendEmailVerification = async (req, res) => {
 
 export const verifyEmailOtp = async (req, res) => {
   try {
-    const { email, otp, phoneNumber, name, firebaseUid } = req.body;
+    const { email, otp, phoneNumber } = req.body;
     
     if (!email || !otp || !phoneNumber) {
       return res.status(400).json({ error: 'Email, OTP, and phone number are required' });
     }
     
-    console.log('[EMAIL_VERIFY] Verifying OTP for:', email);
+    console.log('[VERIFY_OTP] Verifying OTP for email:', email);
     
-    // Verify OTP
+    // Find the OTP in the database
+    const OTP = mongoose.model('OTP');
     const otpDoc = await OTP.findOne({ 
-      email, 
-      otp, 
+      email,
+      otp,
       purpose: 'phone-email-verification'
     });
     
     if (!otpDoc) {
-      console.log('[EMAIL_VERIFY] Invalid or expired OTP for:', email);
-      return res.status(400).json({ error: 'Invalid or expired OTP' });
+      console.log('[VERIFY_OTP] Invalid OTP for email:', email);
+      return res.status(400).json({ error: 'Invalid or expired verification code' });
     }
     
-    // Delete the OTP document
+    // Check if OTP is expired
+    if (otpDoc.expiresAt && otpDoc.expiresAt < new Date()) {
+      console.log('[VERIFY_OTP] Expired OTP for email:', email);
+      await OTP.deleteMany({ email, purpose: 'phone-email-verification' });
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+    }
+    
+    // Delete the OTP
     await OTP.deleteMany({ email, purpose: 'phone-email-verification' });
-    console.log('[EMAIL_VERIFY] OTP verified successfully for:', email);
     
     return res.status(200).json({
       success: true,
@@ -1219,7 +1242,7 @@ export const verifyEmailOtp = async (req, res) => {
       message: 'Email verified successfully'
     });
   } catch (error) {
-    console.error('[EMAIL_VERIFY] Error verifying email OTP:', error);
-    return res.status(500).json({ error: 'Failed to verify email. Please try again.' });
+    console.error('[VERIFY_OTP] Error verifying email OTP:', error);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
