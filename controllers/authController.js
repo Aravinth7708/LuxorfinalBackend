@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { generateOTP, sendOTPEmail } from '../utils/mailService.js';
 import { OAuth2Client } from 'google-auth-library';
+import nodemailer from 'nodemailer';
 
 // Handle Firebase Admin import gracefully
 let admin = null;
@@ -1091,5 +1092,119 @@ export const phoneVerifyWithEmail = async (req, res) => {
   } catch (error) {
     console.error('[PHONE_EMAIL] Error:', error);
     return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Add this to your authController.js file
+export const sendEmailVerification = async (req, res) => {
+  try {
+    const { email, phoneNumber, name } = req.body;
+    
+    if (!email || !phoneNumber) {
+      return res.status(400).json({ error: 'Email and phone number are required' });
+    }
+    
+    console.log('[EMAIL_VERIFY] Sending verification email to:', email);
+    
+    // Check if email is already in use by another user
+    const existingUser = await User.findOne({ email });
+    const existingPhoneUser = await PhoneUser.findOne({ 
+      email, 
+      phoneNumber: { $ne: phoneNumber }
+    });
+    
+    if (existingUser || existingPhoneUser) {
+      console.log('[EMAIL_VERIFY] Email already in use:', email);
+      return res.status(400).json({ error: 'Email is already in use by another account' });
+    }
+    
+    // Generate a simple OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log('[EMAIL_VERIFY] Generated OTP for email verification:', otp);
+    
+    // Store OTP for verification
+    await OTP.create({
+      email,
+      otp,
+      purpose: 'phone-email-verification',
+      userData: { name, phoneNumber }
+    });
+    
+    // Send OTP email
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.gmail,
+        pass: process.env.pass
+      }
+    });
+    
+    const mailOptions = {
+      from: `"Luxor Stay Homes" <${process.env.gmail}>`,
+      to: email,
+      subject: 'Verify your email for Luxor',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+          <h2 style="color: #4a4a4a;">Email Verification</h2>
+          <p>Thank you for registering with Luxor Stay Homes. To verify your email address, please use the following code:</p>
+          <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; font-weight: bold; margin: 20px 0;">
+            ${otp}
+          </div>
+          <p>This code will expire in 10 minutes.</p>
+          <p>If you didn't request this verification, please ignore this email.</p>
+          <p style="margin-top: 30px; font-size: 12px; color: #888;">
+            This is an automated email. Please do not reply.
+          </p>
+        </div>
+      `
+    };
+    
+    await transporter.sendMail(mailOptions);
+    console.log(`[EMAIL_VERIFY] OTP email sent successfully to ${email}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Verification code sent to email'
+    });
+  } catch (error) {
+    console.error('[EMAIL_VERIFY] Error sending email verification:', error);
+    return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+  }
+};
+
+export const verifyEmailOtp = async (req, res) => {
+  try {
+    const { email, otp, phoneNumber, name, firebaseUid } = req.body;
+    
+    if (!email || !otp || !phoneNumber) {
+      return res.status(400).json({ error: 'Email, OTP, and phone number are required' });
+    }
+    
+    console.log('[EMAIL_VERIFY] Verifying OTP for:', email);
+    
+    // Verify OTP
+    const otpDoc = await OTP.findOne({ 
+      email, 
+      otp, 
+      purpose: 'phone-email-verification'
+    });
+    
+    if (!otpDoc) {
+      console.log('[EMAIL_VERIFY] Invalid or expired OTP for:', email);
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+    
+    // Delete the OTP document
+    await OTP.deleteMany({ email, purpose: 'phone-email-verification' });
+    console.log('[EMAIL_VERIFY] OTP verified successfully for:', email);
+    
+    return res.status(200).json({
+      success: true,
+      isEmailVerified: true,
+      message: 'Email verified successfully'
+    });
+  } catch (error) {
+    console.error('[EMAIL_VERIFY] Error verifying email OTP:', error);
+    return res.status(500).json({ error: 'Failed to verify email. Please try again.' });
   }
 };
