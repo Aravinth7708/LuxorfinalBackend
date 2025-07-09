@@ -21,7 +21,6 @@ import contactRoutes from './routes/contactRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
-import routes from './routes/index.js'; // Import the new routes
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
@@ -103,7 +102,6 @@ app.get('/', (req, res) => {
   }
 });
 
-
 app.use('/api/users', userRoutes);
 app.use('/api/villas', villaRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -112,10 +110,6 @@ app.use('/api/photo-gallery', photoGalleryRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api', profileRoutes);
-app.use('/api', routes); // Use the new routes here
-app.use('/complete/profile', phoneProfileRoutes);
-
-// Add the payment routes
 app.use('/api/payments', paymentRoutes);
 
 app.get('/api/rooms/:id', (req, res) => {

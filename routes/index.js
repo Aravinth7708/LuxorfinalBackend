@@ -5,12 +5,10 @@
 
 import express from 'express';
 import authRoutes from './authRoutes.js';
-import propertyRoutes from './propertyRoutes.js';
+import villaRoutes from './villaRoutes.js';
 import bookingRoutes from './bookingRoutes.js';
-import wishlistRoutes from './wishlistRoutes.js';
-import reviewRoutes from './reviewRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
-import phoneProfileRoutes from './phoneProfileRoutes.js'; // Add this line
+import phoneProfileRoutes from './phoneProfileRoutes.js'; 
 
 const router = express.Router();
 
@@ -25,11 +23,9 @@ router.get('/health', (req, res) => {
 
 // Define all routes
 router.use('/auth', authRoutes);
-router.use('/properties', propertyRoutes);
+router.use('/villas', villaRoutes);
 router.use('/bookings', bookingRoutes);
-router.use('/wishlist', wishlistRoutes);
-router.use('/reviews', reviewRoutes);
 router.use('/payments', paymentRoutes);
-router.use('/complete/profile', phoneProfileRoutes); // Add this line
+router.use('/complete/profile', phoneProfileRoutes);
 
 export default router;
