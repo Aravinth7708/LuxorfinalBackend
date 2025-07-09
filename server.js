@@ -19,8 +19,9 @@ import photoGalleryRoutes from './routes/photoGalleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
-
+import phoneProfileRoutes from './phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import routes from './routes/index.js'; // Import the new routes
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
@@ -111,8 +112,8 @@ app.use('/api/photo-gallery', photoGalleryRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api', profileRoutes);
-
-// ...middleware and other routes...
+app.use('/api', routes); // Use the new routes here
+app.use('/complete/profile', phoneProfileRoutes);
 
 // Add the payment routes
 app.use('/api/payments', paymentRoutes);
