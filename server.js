@@ -111,7 +111,7 @@ app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api', profileRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/complete/profile', phoneProfileRoutes);
+app.use('/api/complete/profile', phoneProfileRoutes); // No auth middleware
 
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
