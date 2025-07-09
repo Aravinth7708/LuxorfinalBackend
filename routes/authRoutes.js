@@ -23,6 +23,12 @@ router.post('/forgot-password', authController.forgotPassword);
 router.post('/verify-reset-otp', authController.verifyResetOTP);
 router.post('/resend-otp', authController.resendOTP);
 
+// New routes for phone and email verification
+router.post('/check-phone-user', authController.checkPhoneUser);
+router.post('/phone-verify-with-email', authController.phoneVerifyWithEmail);
+router.post('/send-email-verification', authController.sendEmailVerification);
+router.post('/verify-email-otp', authController.verifyEmailOtp);
+
 // Protected routes
 router.get('/profile', authMiddleware, authController.getProfile);
 router.put('/profile', authMiddleware, authController.updateProfile);

@@ -908,6 +908,179 @@ export const verifyToken = async (req, res) => {
   }
 };
 
+// Add to authController.js
+export const checkPhoneUser = async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+    
+    // Check if user exists in PhoneUser collection
+    const user = await PhoneUser.findOne({ phoneNumber });
+    
+    const isNewUser = !user || !user.email;
+    
+    return res.status(200).json({
+      isNewUser,
+      hasEmail: user ? !!user.email : false
+    });
+  } catch (error) {
+    console.error('[CHECK_PHONE] Error checking phone user:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Add phone verification with email endpoint
+export const phoneVerifyWithEmail = async (req, res) => {
+  try {
+    const { idToken, phoneNumber, email, name, isEmailVerified = false } = req.body;
+    
+    if (!idToken || !phoneNumber || !email) {
+      return res.status(400).json({ error: 'ID token, phone number, and email are required' });
+    }
+    
+    // Verify firebase token (using existing logic)
+    let decodedToken;
+    let verificationMode = 'production';
+    
+    // Use the same token verification logic as in verifyPhoneAuth
+    
+    // Here using the verified phone number from the token
+    const verifiedPhoneNumber = decodedToken?.phone_number || phoneNumber;
+    
+    // Check if user already exists
+    let user = await PhoneUser.findOne({ phoneNumber: verifiedPhoneNumber });
+    
+    if (!user) {
+      // Create new phone user
+      user = new PhoneUser({
+        name: name,
+        phoneNumber: verifiedPhoneNumber,
+        email: email,
+        isVerified: true,
+        isPhoneVerified: true,
+        isEmailVerified: isEmailVerified,
+        role: 'user',
+        firebaseUid: decodedToken?.uid
+      });
+    } else {
+      // Update existing user with new info
+      user.name = name;
+      user.email = email;
+      user.isEmailVerified = isEmailVerified;
+    }
+    
+    await user.save();
+    
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user._id, 
+        role: user.role,
+        userType: 'phone',
+        phoneNumber: user.phoneNumber,
+        email: user.email
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    
+    return res.status(200).json({
+      success: true,
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+        isVerified: true,
+        isPhoneVerified: true,
+        isEmailVerified: user.isEmailVerified
+      }
+    });
+  } catch (error) {
+    console.error('[PHONE_AUTH_EMAIL] Error:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Add to authController.js
+export const sendEmailVerification = async (req, res) => {
+  try {
+    const { email, phoneNumber, name } = req.body;
+    
+    if (!email || !phoneNumber) {
+      return res.status(400).json({ error: 'Email and phone number are required' });
+    }
+    
+    // Check if email is already in use by another user
+    const existingUser = await User.findOne({ email });
+    const existingPhoneUser = await PhoneUser.findOne({ email, phoneNumber: { $ne: phoneNumber } });
+    
+    if (existingUser || existingPhoneUser) {
+      return res.status(400).json({ error: 'Email is already in use by another account' });
+    }
+    
+    // Generate OTP for email verification
+    const otp = generateOTP();
+    
+    // Store OTP for verification
+    await OTP.create({
+      email,
+      otp,
+      purpose: 'phone-email-verification',
+      userData: { name, phoneNumber }
+    });
+    
+    // Send OTP email
+    await sendOTPEmail(email, otp);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Verification code sent to email'
+    });
+  } catch (error) {
+    console.error('[EMAIL_VERIFY] Error sending email verification:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+export const verifyEmailOtp = async (req, res) => {
+  try {
+    const { email, otp, phoneNumber, name, firebaseUid } = req.body;
+    
+    if (!email || !otp || !phoneNumber) {
+      return res.status(400).json({ error: 'Email, OTP, and phone number are required' });
+    }
+    
+    // Verify OTP
+    const otpDoc = await OTP.findOne({ 
+      email, 
+      otp, 
+      purpose: 'phone-email-verification'
+    });
+    
+    if (!otpDoc) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+    
+    // Delete the OTP document
+    await OTP.deleteMany({ email, purpose: 'phone-email-verification' });
+    
+    return res.status(200).json({
+      success: true,
+      isEmailVerified: true,
+      message: 'Email verified successfully'
+    });
+  } catch (error) {
+    console.error('[EMAIL_VERIFY] Error verifying email OTP:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 export default {
   register,
   verifyRegistrationOTP,
@@ -923,5 +1096,9 @@ export default {
   getProfile,
   updateProfile,
   changePassword,
-  verifyToken
+  verifyToken,
+  checkPhoneUser,
+  phoneVerifyWithEmail,
+  sendEmailVerification,
+  verifyEmailOtp
 };
