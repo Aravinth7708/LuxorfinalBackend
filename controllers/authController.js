@@ -917,79 +917,165 @@ export const checkPhoneUser = async (req, res) => {
       return res.status(400).json({ error: 'Phone number is required' });
     }
     
-    // Check if user exists in PhoneUser collection
+    // We need the PhoneUser model
+    const PhoneUser = mongoose.model('PhoneUser');
+    
+    // Check if user exists in the database
     const user = await PhoneUser.findOne({ phoneNumber });
     
-    const isNewUser = !user || !user.email;
-    
     return res.status(200).json({
-      isNewUser,
-      hasEmail: user ? !!user.email : false
+      isNewUser: !user,
+      hasEmail: user ? !!user.email : false,
+      hasName: user ? !!user.name : false
     });
+    
   } catch (error) {
-    console.error('[CHECK_PHONE] Error checking phone user:', error);
+    console.error('[CHECK_PHONE] Error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 };
 
-// Add phone verification with email endpoint
+// Add this function to update a phone user with email and name
 export const phoneVerifyWithEmail = async (req, res) => {
   try {
     const { idToken, phoneNumber, email, name, isEmailVerified = false } = req.body;
     
-    if (!idToken || !phoneNumber || !email) {
-      return res.status(400).json({ error: 'ID token, phone number, and email are required' });
+    if (!idToken || !phoneNumber || !email || !name) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Verify firebase token (using existing logic)
+    // Use the existing token verification from verifyPhoneAuth
     let decodedToken;
     let verificationMode = 'production';
     
-    // Use the same token verification logic as in verifyPhoneAuth
+    // Try Firebase Admin verification first (only if properly configured)
+    const isFirebaseAdminConfigured = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
     
-    // Here using the verified phone number from the token
-    const verifiedPhoneNumber = decodedToken?.phone_number || phoneNumber;
+    if (admin && isFirebaseAdminConfigured) {
+      try {
+        console.log('[PHONE_EMAIL] Attempting Firebase Admin token verification...');
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+        console.log('[PHONE_EMAIL] Firebase Admin verification successful');
+        console.log('[PHONE_EMAIL] Verified phone:', decodedToken.phone_number);
+        verificationMode = 'firebase-admin';
+      } catch (firebaseError) {
+        console.error('[PHONE_EMAIL] Firebase Admin verification failed:', firebaseError.message);
+        
+        // Fall back to basic validation for development
+        if (firebaseError.message.includes('credential') || 
+            firebaseError.message.includes('GOOGLE_APPLICATION_CREDENTIALS') ||
+            firebaseError.code === 'auth/invalid-credential') {
+          console.log('[PHONE_EMAIL] Using development fallback mode');
+          verificationMode = 'development';
+        } else {
+          return res.status(400).json({ 
+            error: 'Firebase ID token verification failed',
+            details: firebaseError.message 
+          });
+        }
+      }
+    } else {
+      console.log('[PHONE_EMAIL] Firebase Admin not available - using development mode');
+      verificationMode = 'development';
+    }
+
+    // Development/fallback mode - basic token structure validation
+    if (verificationMode === 'development') {
+      try {
+        // Basic JWT structure validation (for development)
+        const tokenParts = idToken.split('.');
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token structure');
+        }
+        
+        // Decode the payload (without verification for development)
+        const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+        
+        decodedToken = {
+          phone_number: phoneNumber, // Use the provided phone number
+          uid: payload.sub || `phone_${phoneNumber.replace(/[^0-9]/g, '')}`,
+          ...payload
+        };
+        
+        console.log('[PHONE_EMAIL] Development mode verification successful');
+      } catch (devError) {
+        console.error('[PHONE_EMAIL] Development mode validation failed:', devError);
+        return res.status(400).json({ error: 'Invalid token format' });
+      }
+    }
+
+    // Validate phone number match
+    const verifiedPhoneNumber = decodedToken.phone_number || phoneNumber;
     
-    // Check if user already exists
+    if (!verifiedPhoneNumber) {
+      return res.status(400).json({ error: 'Phone number not found in token' });
+    }
+
+    // For strict verification, check if token phone matches provided phone
+    if (verificationMode === 'firebase-admin' && decodedToken.phone_number !== phoneNumber) {
+      return res.status(400).json({ error: 'Phone number mismatch' });
+    }
+
+    console.log('[PHONE_EMAIL] Using phone number:', verifiedPhoneNumber);
+    
+    // We need the PhoneUser model
+    const PhoneUser = mongoose.model('PhoneUser');
+    
+    // Check if user already exists with this phone number
     let user = await PhoneUser.findOne({ phoneNumber: verifiedPhoneNumber });
-    
+    let isNewUser = false;
+
     if (!user) {
-      // Create new phone user
+      // Create new user
+      isNewUser = true;
+      console.log('[PHONE_EMAIL] Creating new user for phone:', verifiedPhoneNumber);
+      
       user = new PhoneUser({
         name: name,
-        phoneNumber: verifiedPhoneNumber,
         email: email,
+        phoneNumber: verifiedPhoneNumber,
         isVerified: true,
         isPhoneVerified: true,
         isEmailVerified: isEmailVerified,
         role: 'user',
-        firebaseUid: decodedToken?.uid
+        firebaseUid: decodedToken.uid
       });
+
+      await user.save();
+      console.log(`[PHONE_EMAIL] Successfully created new phone user with ID: ${user._id}`);
+      
     } else {
-      // Update existing user with new info
+      // Update existing user with the new email and name
+      console.log(`[PHONE_EMAIL] Updating existing user: ${user._id}`);
       user.name = name;
       user.email = email;
       user.isEmailVerified = isEmailVerified;
+      
+      await user.save();
+      console.log(`[PHONE_EMAIL] Successfully updated user: ${user._id}`);
     }
-    
-    await user.save();
-    
+
     // Generate JWT token
-    const token = jwt.sign(
+    const jwtToken = jwt.sign(
       { 
         userId: user._id, 
         role: user.role,
         userType: 'phone',
-        phoneNumber: user.phoneNumber,
-        email: user.email
+        phoneNumber: user.phoneNumber
       },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
-    
+
+    console.log(`[PHONE_EMAIL] Successful auth for user: ${user._id} (${user.phoneNumber}) - Mode: ${verificationMode}`);
+
+    // Return user data and token
     return res.status(200).json({
+      token: jwtToken,
       success: true,
-      token,
+      isNewUser,
+      verificationMode,
+      userType: 'phone',
       user: {
         _id: user._id,
         name: user.name,
@@ -1001,104 +1087,9 @@ export const phoneVerifyWithEmail = async (req, res) => {
         isEmailVerified: user.isEmailVerified
       }
     });
+    
   } catch (error) {
-    console.error('[PHONE_AUTH_EMAIL] Error:', error);
+    console.error('[PHONE_EMAIL] Error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
-};
-
-// Add to authController.js
-export const sendEmailVerification = async (req, res) => {
-  try {
-    const { email, phoneNumber, name } = req.body;
-    
-    if (!email || !phoneNumber) {
-      return res.status(400).json({ error: 'Email and phone number are required' });
-    }
-    
-    // Check if email is already in use by another user
-    const existingUser = await User.findOne({ email });
-    const existingPhoneUser = await PhoneUser.findOne({ email, phoneNumber: { $ne: phoneNumber } });
-    
-    if (existingUser || existingPhoneUser) {
-      return res.status(400).json({ error: 'Email is already in use by another account' });
-    }
-    
-    // Generate OTP for email verification
-    const otp = generateOTP();
-    
-    // Store OTP for verification
-    await OTP.create({
-      email,
-      otp,
-      purpose: 'phone-email-verification',
-      userData: { name, phoneNumber }
-    });
-    
-    // Send OTP email
-    await sendOTPEmail(email, otp);
-    
-    return res.status(200).json({
-      success: true,
-      message: 'Verification code sent to email'
-    });
-  } catch (error) {
-    console.error('[EMAIL_VERIFY] Error sending email verification:', error);
-    return res.status(500).json({ error: 'Server error' });
-  }
-};
-
-export const verifyEmailOtp = async (req, res) => {
-  try {
-    const { email, otp, phoneNumber, name, firebaseUid } = req.body;
-    
-    if (!email || !otp || !phoneNumber) {
-      return res.status(400).json({ error: 'Email, OTP, and phone number are required' });
-    }
-    
-    // Verify OTP
-    const otpDoc = await OTP.findOne({ 
-      email, 
-      otp, 
-      purpose: 'phone-email-verification'
-    });
-    
-    if (!otpDoc) {
-      return res.status(400).json({ error: 'Invalid or expired OTP' });
-    }
-    
-    // Delete the OTP document
-    await OTP.deleteMany({ email, purpose: 'phone-email-verification' });
-    
-    return res.status(200).json({
-      success: true,
-      isEmailVerified: true,
-      message: 'Email verified successfully'
-    });
-  } catch (error) {
-    console.error('[EMAIL_VERIFY] Error verifying email OTP:', error);
-    return res.status(500).json({ error: 'Server error' });
-  }
-};
-
-export default {
-  register,
-  verifyRegistrationOTP,
-  login,
-  handleGoogleAuth,
-  verifyPhoneAuth,
-  handlePhoneVerification,
-  resendOTP,
-  forgotPassword,
-  verifyResetOTP,
-  logout,
-  refreshToken,
-  getProfile,
-  updateProfile,
-  changePassword,
-  verifyToken,
-  checkPhoneUser,
-  phoneVerifyWithEmail,
-  sendEmailVerification,
-  verifyEmailOtp
 };
