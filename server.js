@@ -21,6 +21,7 @@ import contactRoutes from './routes/contactRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import adminPhoneUserRoutes from './routes/adminPhoneUserRoutes.js';
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
@@ -112,6 +113,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api', profileRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/complete/profile', phoneProfileRoutes); // No auth middleware
+app.use('/api/admin', adminPhoneUserRoutes); // Admin-only routes for phone user management
 
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
