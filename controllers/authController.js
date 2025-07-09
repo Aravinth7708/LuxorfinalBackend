@@ -1107,60 +1107,75 @@ export const sendEmailVerification = async (req, res) => {
     console.log('[EMAIL_VERIFY] Sending verification email to:', email);
     
     // Check if email is already in use by another user
-    const existingUser = await User.findOne({ email });
-    const existingPhoneUser = await PhoneUser.findOne({ 
-      email, 
-      phoneNumber: { $ne: phoneNumber }
-    });
-    
-    if (existingUser || existingPhoneUser) {
-      console.log('[EMAIL_VERIFY] Email already in use:', email);
-      return res.status(400).json({ error: 'Email is already in use by another account' });
+    try {
+      const existingUser = await User.findOne({ email });
+      const existingPhoneUser = await PhoneUser.findOne({ 
+        email, 
+        phoneNumber: { $ne: phoneNumber }
+      });
+      
+      if (existingUser || existingPhoneUser) {
+        console.log('[EMAIL_VERIFY] Email already in use:', email);
+        return res.status(400).json({ error: 'Email is already in use by another account' });
+      }
+    } catch (dbError) {
+      console.error('[EMAIL_VERIFY] Database error checking existing email:', dbError);
+      // Continue even if DB check fails
     }
     
     // Generate a simple OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log('[EMAIL_VERIFY] Generated OTP for email verification:', otp);
     
-    // Store OTP for verification
-    await OTP.create({
-      email,
-      otp,
-      purpose: 'phone-email-verification',
-      userData: { name, phoneNumber }
-    });
+    // Store OTP for verification - use try/catch to handle DB errors
+    try {
+      await OTP.create({
+        email,
+        otp,
+        purpose: 'phone-email-verification',
+        userData: { name, phoneNumber }
+      });
+    } catch (otpError) {
+      console.error('[EMAIL_VERIFY] Error storing OTP:', otpError);
+      return res.status(500).json({ error: 'Failed to process verification. Please try again.' });
+    }
     
-    // Send OTP email
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.gmail,
-        pass: process.env.pass
-      }
-    });
-    
-    const mailOptions = {
-      from: `"Luxor Stay Homes" <${process.env.gmail}>`,
-      to: email,
-      subject: 'Verify your email for Luxor',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-          <h2 style="color: #4a4a4a;">Email Verification</h2>
-          <p>Thank you for registering with Luxor Stay Homes. To verify your email address, please use the following code:</p>
-          <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; font-weight: bold; margin: 20px 0;">
-            ${otp}
+    // Send OTP email with better error handling
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.gmail,
+          pass: process.env.pass
+        }
+      });
+      
+      const mailOptions = {
+        from: `"Luxor Stay Homes" <${process.env.gmail}>`,
+        to: email,
+        subject: 'Verify your email for Luxor',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+            <h2 style="color: #4a4a4a;">Email Verification</h2>
+            <p>Thank you for registering with Luxor Stay Homes. To verify your email address, please use the following code:</p>
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; font-weight: bold; margin: 20px 0;">
+              ${otp}
+            </div>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this verification, please ignore this email.</p>
+            <p style="margin-top: 30px; font-size: 12px; color: #888;">
+              This is an automated email. Please do not reply.
+            </p>
           </div>
-          <p>This code will expire in 10 minutes.</p>
-          <p>If you didn't request this verification, please ignore this email.</p>
-          <p style="margin-top: 30px; font-size: 12px; color: #888;">
-            This is an automated email. Please do not reply.
-          </p>
-        </div>
-      `
-    };
-    
-    await transporter.sendMail(mailOptions);
-    console.log(`[EMAIL_VERIFY] OTP email sent successfully to ${email}`);
+        `
+      };
+      
+      await transporter.sendMail(mailOptions);
+      console.log(`[EMAIL_VERIFY] OTP email sent successfully to ${email}`);
+    } catch (emailError) {
+      console.error('[EMAIL_VERIFY] Error sending email:', emailError);
+      return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+    }
     
     return res.status(200).json({
       success: true,
