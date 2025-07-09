@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import PhoneUser from '../models/PhoneUser.js';
 import OTP from '../models/OTP.js';
 
@@ -154,16 +155,35 @@ export const verifyAndUpdateProfile = async (req, res) => {
     await user.save();
     console.log('[PROFILE_UPDATE] Profile updated successfully for user:', user._id);
     
+    // Generate a token for the user
+    const token = jwt.sign(
+      { 
+        id: user._id, 
+        userId: user._id,
+        email: user.email, 
+        phoneNumber: user.phoneNumber,
+        name: user.name,
+        role: user.role,
+        userType: 'phone',
+        isEmailVerified: user.isEmailVerified,
+        isPhoneVerified: user.isPhoneVerified 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' } // 30 days expiration
+    );
+    
     return res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
+      token, // Include the token in the response
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
         isEmailVerified: user.isEmailVerified,
-        isPhoneVerified: user.isPhoneVerified
+        isPhoneVerified: user.isPhoneVerified,
+        role: user.role
       }
     });
     

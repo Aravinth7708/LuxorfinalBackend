@@ -120,9 +120,17 @@ export const authMiddleware = async (req, res, next) => {
       let userType = decoded.userType || 'regular'; // Default to regular user
       
       if (userType === 'phone') {
-        // Look for phone user
-        user = await PhoneUser.findById(userIdToUse);
-        console.log(`[AUTH] Looking for phone user with ID: ${userIdToUse}`);
+        // Look for phone user by ID or phoneNumber
+        if (decoded.phoneNumber) {
+          user = await PhoneUser.findOne({ phoneNumber: decoded.phoneNumber });
+          console.log(`[AUTH] Looking for phone user with phoneNumber: ${decoded.phoneNumber}`);
+        }
+        
+        // If not found by phone number, try by ID
+        if (!user) {
+          user = await PhoneUser.findById(userIdToUse);
+          console.log(`[AUTH] Looking for phone user with ID: ${userIdToUse}`);
+        }
       } else {
         // Look for regular user first
         user = await User.findById(userIdToUse);
