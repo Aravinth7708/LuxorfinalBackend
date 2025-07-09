@@ -19,7 +19,7 @@ import photoGalleryRoutes from './routes/photoGalleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
-import phoneProfileRoutes from './phoneProfileRoutes.js';
+import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import routes from './routes/index.js'; // Import the new routes
 connectDB()
