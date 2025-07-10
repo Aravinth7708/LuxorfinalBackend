@@ -13,6 +13,9 @@ router.get("/search", bookingController.searchBookings)
 // Get user's bookings
 router.get("/user-bookings", authMiddleware, bookingController.getUserBookings)
 
+// Get user's address information from profile and previous bookings
+router.get("/user-address-info", authMiddleware, bookingController.getUserAddressInfo)
+
 // Get a specific booking by ID
 router.get("/:id", authMiddleware, bookingController.getBookingById)
 

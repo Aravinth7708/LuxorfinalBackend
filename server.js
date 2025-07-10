@@ -22,6 +22,8 @@ import profileRoutes from './routes/profileRoutes.js';
 import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import adminPhoneUserRoutes from './routes/adminPhoneUserRoutes.js';
+// Add this import at the top of your server.js file with your other imports
+// import profileRoutes from './routes/profileRoutes.js';
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
@@ -82,6 +84,10 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '2mb' })); // Increase JSON payload limit
+app.use(express.urlencoded({ extended: true })); // Support URL-encoded bodies
+
+// Add this middleware to serve uploaded images
+app.use('/uploads', express.static('uploads'));
 
 // Root health check endpoint with more robust error handling
 app.get('/', (req, res) => {
@@ -103,6 +109,10 @@ app.get('/', (req, res) => {
   }
 });
 
+
+
+// Then add this line with your other route registrations
+app.use('/api/profile', profileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/villas', villaRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -119,6 +129,12 @@ app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
   // Redirect to the villas endpoint
   res.redirect(`/api/villas/${villaId}`);
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Server error', error: err.message });
 });
 
 // Global error handler - improved for serverless environments

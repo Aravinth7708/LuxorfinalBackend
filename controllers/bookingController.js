@@ -2,6 +2,11 @@ import Booking from "../models/Booking.js"
 import Villa from "../models/Villa.js"
 import nodemailer from "nodemailer"
 
+// Import the necessary models
+import UserProfile from "../models/UserProfile.js";
+import User from "../models/User.js";
+import PhoneUser from "../models/PhoneUser.js";
+
 export const createBooking = async (req, res) => {
   try {
     console.log("[BOOKING] Received booking request:", req.body)
@@ -500,6 +505,130 @@ async function sendCancellationEmail(email, booking) {
 
   await transporter.sendMail(mailOptions)
 }
+
+export const getUserAddressInfo = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const userEmail = req.user?.email;
+    
+    console.log("[ADDRESS_INFO] Fetching address for user:", { 
+      userId, 
+      email: userEmail, 
+      userType: req.user?.userType 
+    });
+    
+    if (!userId && !userEmail) {
+      console.log("[ADDRESS_INFO] No user identification provided");
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    let addressInfo = null;
+    let addressSource = null;
+    
+    // 1. First, check user profile for address info (if regular user)
+    if (req.user?.userType !== 'phone') {
+      try {
+        // Find the user profile
+        const userProfile = await UserProfile.findOne({ userId });
+        
+        if (userProfile && (userProfile.address || userProfile.city)) {
+          addressInfo = {
+            street: userProfile.address || "",
+            country: userProfile.country || "",
+            state: userProfile.state || "",
+            city: userProfile.city || "",
+            zipCode: userProfile.zipCode || ""
+          };
+          addressSource = "profile";
+          console.log("[ADDRESS_INFO] Found address in user profile");
+        }
+      } catch (err) {
+        console.error("[ADDRESS_INFO] Error checking user profile:", err);
+        // Continue to check other sources
+      }
+    }
+    
+    // 2. Check phone user (if phone user or no address found yet)
+    if (!addressInfo) {
+      try {
+        let phoneUser = null;
+        
+        // If we have a userId and it's a phone user
+        if (userId && req.user?.userType === 'phone') {
+          phoneUser = await PhoneUser.findById(userId);
+        } 
+        // If we have an email and no userId or not explicitly a phone user
+        else if (userEmail) {
+          phoneUser = await PhoneUser.findOne({ email: userEmail });
+        }
+        
+        if (phoneUser && (phoneUser.address || phoneUser.city)) {
+          addressInfo = {
+            street: phoneUser.address || "",
+            country: phoneUser.country || "",
+            state: phoneUser.state || "",
+            city: phoneUser.city || "",
+            zipCode: phoneUser.zipCode || ""
+          };
+          addressSource = "phoneUser";
+          console.log("[ADDRESS_INFO] Found address in phone user profile");
+        }
+      } catch (err) {
+        console.error("[ADDRESS_INFO] Error checking phone user:", err);
+        // Continue to check bookings
+      }
+    }
+    
+    // 3. If still no address found, check previous bookings
+    if (!addressInfo) {
+      try {
+        // Build query to find bookings by this user
+        let query = {};
+        
+        if (userId) {
+          query.userId = userId;
+        } else if (userEmail) {
+          query.email = userEmail;
+        }
+        
+        // Get the most recent booking with address info
+        const latestBooking = await Booking.findOne(query)
+          .where('address.street').exists(true)
+          .where('address.street').ne("")
+          .sort({ createdAt: -1 });
+        
+        if (latestBooking && latestBooking.address && latestBooking.address.street) {
+          addressInfo = latestBooking.address;
+          addressSource = "booking";
+          console.log("[ADDRESS_INFO] Found address in previous booking");
+        }
+      } catch (err) {
+        console.error("[ADDRESS_INFO] Error checking previous bookings:", err);
+      }
+    }
+    
+    if (!addressInfo) {
+      console.log("[ADDRESS_INFO] No address information found for user");
+      return res.json({ 
+        success: false,
+        message: "No address information found" 
+      });
+    }
+    
+    return res.json({
+      success: true,
+      addressInfo,
+      source: addressSource
+    });
+    
+  } catch (err) {
+    console.error("[ADDRESS_INFO] Error fetching user address:", err);
+    return res.status(500).json({
+      error: "Server error",
+      message: err.message
+    });
+  }
+};
 
 export const getBookingById = async (req, res) => {
   try {
