@@ -7,7 +7,10 @@ export const createBooking = async (req, res) => {
     console.log("[BOOKING] Received booking request:", req.body)
     console.log("[BOOKING] User from auth:", req.user)
 
-    const { villaId, email, guestName, checkIn, checkOut, checkInTime, checkOutTime, guests, totalAmount, totalDays, infants } = req.body
+    const { 
+      villaId, email, guestName, checkIn, checkOut, checkInTime, checkOutTime, 
+      guests, totalAmount, totalDays, infants, address 
+    } = req.body
 
     if (!villaId || !email || !checkIn || !checkOut || !guests) {
       console.error("[BOOKING] Missing required fields", req.body)
@@ -54,6 +57,15 @@ export const createBooking = async (req, res) => {
       return res.status(404).json({ error: "Villa not found" })
     }
 
+    // Validate guest count against villa's maximum capacity
+    if (guests > villa.guests) {
+      console.error(`[BOOKING] Guest count (${guests}) exceeds villa's maximum capacity (${villa.guests})`)
+      return res.status(400).json({ 
+        error: "Guest limit exceeded", 
+        message: `This villa allows a maximum of ${villa.guests} guests. You've selected ${guests} guests.` 
+      })
+    }
+
     console.log("[BOOKING] Creating booking for villa:", villa.name)
     const booking = await Booking.create({
       villaId,
@@ -69,6 +81,14 @@ export const createBooking = async (req, res) => {
       totalAmount: req.body.totalAmount || totalAmount,
       totalDays: totalDays || calculatedDays,
       infants: infants || 0,
+      // Save address information if provided
+      address: address || {
+        street: "",
+        country: "",
+        state: "",
+        city: "",
+        zipCode: ""
+      },
     })
 
     console.log("[BOOKING] Booking created with userId:", booking.userId)

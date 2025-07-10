@@ -1,0 +1,399 @@
+[{
+  "_id": {
+    "$oid": "6857f75da955a6347dd39c06"
+  },
+  "name": "Amrith Palace",
+  "location": "Chennai",
+  "price": 45000,
+  "description": "Located in the peaceful village of Saligao, Villa Kaia an elegant 4-bedroom retreat offers a perfect Goan escape with comfort and style.",
+  "facilities": [
+    {
+      "name": "Private Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c07"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c08"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c09"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c0a"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c0b"
+      }
+    },
+    {
+      "name": "Microwave",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c0c"
+      }
+    }
+  ],
+  "guests": 18,
+  "bedrooms": 9,
+  "__v": 2,
+  "bathrooms": 9,
+  "weekendprice": "65000"
+},
+{
+  "_id": {
+    "$oid": "6857f75da955a6347dd39c14"
+  },
+  "name": "East Coast Villa",
+  "location": "Chennai",
+  "price": 15000,
+  "description": "Luxurious villa in Arpora with premium amenities and spacious accommodation for large groups.",
+  "facilities": [
+    {
+      "name": "Private Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c15"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c16"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c17"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c18"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c19"
+      }
+    },
+    {
+      "name": "Microwave",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c1a"
+      }
+    }
+  ],
+  "guests": 10,
+  "bedrooms": 3,
+  "__v": 1,
+  "bathrooms": 3,
+  "weekendprice": "25000"
+},
+{
+  "_id": {
+    "$oid": "6857f75da955a6347dd39c1b"
+  },
+  "name": "Ram Water Villa",
+  "location": "Chennai",
+  "price": 30000,
+  "description": "Peaceful retreat in Candolim offering tranquility and modern comfort.",
+  "facilities": [
+    {
+      "name": "Private Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c1c"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c1d"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c1e"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c1f"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c20"
+      }
+    },
+    {
+      "name": "Microwave",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c21"
+      }
+    }
+  ],
+  "guests": 10,
+  "bedrooms": 3,
+  "__v": 1,
+  "bathrooms": 5,
+  "weekendprice": "45000"
+},
+{
+  "_id": {
+    "$oid": "6857f75da955a6347dd39c22"
+  },
+  "name": "Lavish Villa I",
+  "location": "Pondicherry",
+  "price": 18000,
+  "description": "Modern apartment .",
+  "facilities": [
+    {
+      "name": "Shared Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c23"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c24"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c25"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c26"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c27"
+      }
+    },
+    {
+      "name": "Microwave",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c28"
+      }
+    }
+  ],
+  "guests": 4,
+  "bedrooms": 2,
+  "__v": 0,
+  "bathrooms": 3,
+  "weekendprice": "25000"
+},
+{
+  "_id": {
+    "$oid": "6857f75da955a6347dd39c29"
+  },
+  "name": "Lavish Villa II",
+  "location": "Pondicherry",
+  "price": 18000,
+  "description": "Expansive villa in Anjuna perfect for large groups and celebrations.",
+  "facilities": [
+    {
+      "name": "Private Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c2a"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c2b"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c2c"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c2d"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c2e"
+      }
+    },
+    {
+      "name": "Microwave",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c2f"
+      }
+    }
+  ],
+  "guests": 12,
+  "bedrooms": 5,
+  "__v": 0,
+  "bathrooms": 3,
+  "weekendprice": "25000"
+},
+{
+  "_id": {
+    "$oid": "6857f75da955a6347dd39c30"
+  },
+  "name": "Lavish Villa III",
+  "location": "Pondicherry",
+  "price": 16000,
+  "description": "Beachfront villa in Morjim with stunning coastal views.",
+  "facilities": [
+    {
+      "name": "Private Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c31"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c32"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c33"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c34"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c35"
+      }
+    },
+    {
+      "name": "Microwave",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "6857f75da955a6347dd39c36"
+      }
+    }
+  ],
+  "guests": 10,
+  "bedrooms": 4,
+  "__v": 0,
+  "bathrooms": 3,
+  "weekendprice": "23000"
+},
+{
+  "_id": {
+    "$oid": "685e8a2e89f969d892fb5717"
+  },
+  "name": "Empire Anand Villa Samudra",
+  "location": "Chennai",
+  "price": 40000,
+  "description": "Experience luxury and comfort at Empire Anand Villa Samudra, a beautiful retreat in Pondicherry with stunning views and premium amenities.",
+  "facilities": [
+    {
+      "name": "Private Pool",
+      "image": "Pool",
+      "_id": {
+        "$oid": "685e8a2e89f969d892fb5718"
+      }
+    },
+    {
+      "name": "Free Parking",
+      "image": "Parking",
+      "_id": {
+        "$oid": "685e8a2e89f969d892fb5719"
+      }
+    },
+    {
+      "name": "AC",
+      "image": "Ac",
+      "_id": {
+        "$oid": "685e8a2e89f969d892fb571a"
+      }
+    },
+    {
+      "name": "WiFi",
+      "image": "Wifi",
+      "_id": {
+        "$oid": "685e8a2e89f969d892fb571b"
+      }
+    },
+    {
+      "name": "Kitchen",
+      "image": "Kitchen",
+      "_id": {
+        "$oid": "685e8a2e89f969d892fb571c"
+      }
+    }
+  ],
+  "guests": 8,
+  "bedrooms": 4,
+  "bathrooms": 6,
+  "__v": 1,
+  "weekendprice": "60000"
+}]

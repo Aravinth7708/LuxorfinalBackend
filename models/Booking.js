@@ -57,6 +57,14 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    // Address fields for the guest
+    address: {
+      street: String,
+      country: String,
+      state: String,
+      city: String,
+      zipCode: String,
+    },
     status: {
       type: String,
       enum: ["pending", "confirmed", "cancelled", "completed"],
