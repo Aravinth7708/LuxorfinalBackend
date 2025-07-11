@@ -112,21 +112,40 @@ export const updateUserProfile = async (req, res) => {
       return res.status(401).json({ error: "Authentication required" })
     }
 
+    console.log("Updating profile with data:", profileData);
+
+    // Clean phone number if provided
+    if (profileData.phone) {
+      profileData.phone = profileData.phone.replace(/\s+/g, '').replace(/[-+()]/g, '');
+    }
+
+    // Ensure country field is included in the update
+    const updateData = {
+      userId: userId,
+      email: userEmail,
+      ...profileData,
+      updatedAt: new Date(),
+      // Make sure these fields are explicitly included
+      country: profileData.country || "",
+      state: profileData.state || "",
+      city: profileData.city || "",
+      zipCode: profileData.zipCode || "",
+      countryCode: profileData.countryCode || "+91",
+      phone: profileData.phone || ""
+    };
+
     // Update or create UserProfile
     const updatedProfile = await UserProfile.findOneAndUpdate(
       { userId: userId },
-      {
-        userId: userId,
-        email: userEmail,
-        ...profileData,
-        updatedAt: new Date(),
-      },
+      updateData,
       {
         upsert: true,
         new: true,
         runValidators: true,
-      },
+      }
     )
+
+    console.log("Profile updated successfully:", updatedProfile);
 
     return res.status(200).json({
       success: true,
@@ -209,18 +228,21 @@ export const updatePhoneNumber = async (req, res) => {
       return res.status(400).json({ error: "Phone number and country code are required" })
     }
 
+    // Ensure phone number is stored correctly without any formatting issues
+    const cleanedPhone = phone.replace(/\s+/g, '').replace(/[-+()]/g, '');
+
     // Update profile with new phone number
     const updatedProfile = await UserProfile.findOneAndUpdate(
       { userId: userId },
       {
-        phone: phone,
+        phone: cleanedPhone, // Store clean phone number
         countryCode: countryCode,
         updatedAt: new Date(),
       },
       {
         upsert: true,
         new: true,
-      },
+      }
     )
 
     return res.status(200).json({

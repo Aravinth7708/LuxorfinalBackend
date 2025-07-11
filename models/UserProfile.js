@@ -15,6 +15,11 @@ const UserProfileSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  countryCode: {
+    type: String,
+    trim: true,
+    default: "+91"
+  },
   address: {
     type: String,
     trim: true
@@ -24,6 +29,10 @@ const UserProfileSchema = new mongoose.Schema({
     trim: true
   },
   state: {
+    type: String,
+    trim: true
+  },
+  country: {
     type: String,
     trim: true
   },

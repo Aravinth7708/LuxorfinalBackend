@@ -1,11 +1,11 @@
 import Booking from "../models/Booking.js"
 import Villa from "../models/Villa.js"
-import nodemailer from "nodemailer"
-
-// Import the necessary models
 import UserProfile from "../models/UserProfile.js";
 import User from "../models/User.js";
 import PhoneUser from "../models/PhoneUser.js";
+
+// Import our new email service
+import { sendBookingConfirmationEmail, sendCancellationEmail } from "../utils/email.js";
 
 export const createBooking = async (req, res) => {
   try {
@@ -98,12 +98,12 @@ export const createBooking = async (req, res) => {
 
     console.log("[BOOKING] Booking created with userId:", booking.userId)
 
-    // Send confirmation email
+    // Send confirmation email with PDF attachment
     try {
-      await sendBookingEmail(email, booking, villa)
-      console.log("[BOOKING] Confirmation email sent to:", email)
+      await sendBookingConfirmationEmail(booking, villa);
+      console.log("[BOOKING] Confirmation email with PDF sent to:", booking.email);
     } catch (mailErr) {
-      console.error("[BOOKING] Error sending confirmation email:", mailErr)
+      console.error("[BOOKING] Error sending confirmation email:", mailErr);
     }
 
     res.json({ success: true, booking })
@@ -113,191 +113,7 @@ export const createBooking = async (req, res) => {
   }
 }
 
-async function sendBookingEmail(email, booking, villa) {
-  const transporter = nodemailer.createTransporter({
-    service: "gmail",
-    auth: {
-      user: process.env.gmail,
-      pass: process.env.pass,
-    },
-  })
-
-  // Format dates
-  const checkInDate = new Date(booking.checkIn)
-  const checkOutDate = new Date(booking.checkOut)
-
-  const formattedCheckIn = checkInDate.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-  const formattedCheckOut = checkOutDate.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-
-  const bookingDate = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-
-  const villaImageUrl =
-    villa.images && villa.images.length > 0
-      ? `${process.env.BASE_URL || "https://luxorstayvillas.com"}/img/${villa.images[0]}`
-      : `${process.env.BASE_URL || "https://luxorstayvillas.com"}/img/default-villa.jpg`
-
-  const basePrice = villa.price * booking.totalDays
-  const serviceFee = Math.round(basePrice * 0.05)
-  const taxAmount = Math.round((basePrice + serviceFee) * 0.18)
-  const totalAmount = booking.totalAmount || basePrice + serviceFee + taxAmount
-
-  const bookingNumber = String(booking._id).substring(0, 6).toUpperCase()
-
-  const mailOptions = {
-    from: process.env.gmail,
-    to: email,
-    subject: `Booking Confirmation #${bookingNumber} - ${villa.name}`,
-    html: `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Booking Confirmation</title>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
-        .container { max-width: 650px; margin: 20px auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .header { background-color: #1e3a8a; color: white; padding: 25px 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
-        .booking-details { padding: 25px 30px; }
-        .booking-id { background-color: #f2f7ff; padding: 12px; border-radius: 6px; text-align: center; margin-bottom: 20px; }
-        .booking-id span { font-weight: 700; color: #1e3a8a; font-size: 18px; }
-        .footer { background-color: #f2f7ff; padding: 20px 30px; text-align: center; font-size: 14px; color: #666; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Booking Confirmation</h1>
-          <p>Thank you for choosing LuxorStay Villas</p>
-        </div>
-        <div class="booking-details">
-          <div class="booking-id">
-            <span>Booking #${bookingNumber}</span>
-          </div>
-          <h2>${villa.name}</h2>
-          <p><strong>Check-in:</strong> ${formattedCheckIn}</p>
-          <p><strong>Check-out:</strong> ${formattedCheckOut}</p>
-          <p><strong>Guests:</strong> ${booking.guests} guests</p>
-          <p><strong>Total Amount:</strong> ₹${totalAmount?.toLocaleString() || "0"}</p>
-          <p><strong>Status:</strong> Confirmed</p>
-        </div>
-        <div class="footer">
-          <p>For questions, contact us at luxorholidayhomestays@gmail.com</p>
-          <p>© ${new Date().getFullYear()} LuxorStay Villas. All rights reserved.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `,
-  }
-
-  await transporter.sendMail(mailOptions)
-}
-
-export const searchBookings = async (req, res) => {
-  try {
-    const { checkIn, checkOut } = req.query
-    if (!checkIn || !checkOut) {
-      return res.status(400).json({ error: "checkIn and checkOut required" })
-    }
-
-    const bookings = await Booking.find({
-      $or: [
-        {
-          checkIn: { $lte: new Date(checkOut) },
-          checkOut: { $gte: new Date(checkIn) },
-        },
-      ],
-    })
-
-    res.json(bookings)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const getUserBookings = async (req, res) => {
-  try {
-    console.log("[BOOKING] Fetching user bookings with auth:", {
-      userId: req.user?.userId,
-      email: req.user?.email,
-      hasUserObject: !!req.user,
-    })
-
-    if (!req.user) {
-      console.error("[BOOKING] Authentication error: No user object in request")
-      return res.status(401).json({
-        error: "Authentication required",
-        details: "User information not available",
-      })
-    }
-
-    const userId = req.user.userId
-    if (!userId) {
-      console.error("[BOOKING] User ID not found in authentication data")
-      return res.status(400).json({
-        error: "Invalid user data",
-        details: "User ID is required",
-      })
-    }
-
-    let userEmail = req.user.email
-    if (!userEmail) {
-      console.log(`[BOOKING] Email not found in token, looking up user with ID: ${userId}`)
-      const User = await import("../models/User.js")
-      try {
-        const user = await User.default.findById(userId)
-        if (!user) {
-          console.error(`[BOOKING] User not found for ID: ${userId}`)
-          return res.status(404).json({
-            error: "User not found",
-            details: "The user associated with this token does not exist",
-          })
-        }
-        userEmail = user.email
-        console.log(`[BOOKING] Found user email: ${userEmail}`)
-      } catch (err) {
-        console.error(`[BOOKING] Error looking up user: ${err.message}`)
-        return res.status(500).json({
-          error: "Database error",
-          details: "Error retrieving user information",
-        })
-      }
-    }
-
-    console.log(`[BOOKING] Looking for bookings with email: ${userEmail}`)
-    const bookings = await Booking.find({ email: userEmail })
-    console.log(`[BOOKING] Found ${bookings.length} bookings for email ${userEmail}`)
-
-    res.json({
-      success: true,
-      count: bookings.length,
-      bookings: bookings,
-    })
-  } catch (err) {
-    console.error("[BOOKING] Error fetching user bookings:", err)
-    res.status(500).json({
-      error: "Failed to fetch bookings",
-      message: err.message,
-    })
-  }
-}
-
+// Update the cancelBooking function to use the new email service
 export const cancelBooking = async (req, res) => {
   try {
     const { id } = req.params
@@ -449,61 +265,93 @@ export const cancelBooking = async (req, res) => {
   }
 }
 
-async function sendCancellationEmail(email, booking) {
-  const transporter = nodemailer.createTransporter({
-    service: "gmail",
-    auth: {
-      user: process.env.gmail,
-      pass: process.env.pass,
-    },
-  })
+export const searchBookings = async (req, res) => {
+  try {
+    const { checkIn, checkOut } = req.query
+    if (!checkIn || !checkOut) {
+      return res.status(400).json({ error: "checkIn and checkOut required" })
+    }
 
-  const bookingNumber = String(booking._id).substring(0, 6).toUpperCase()
+    const bookings = await Booking.find({
+      $or: [
+        {
+          checkIn: { $lte: new Date(checkOut) },
+          checkOut: { $gte: new Date(checkIn) },
+        },
+      ],
+    })
 
-  const mailOptions = {
-    from: process.env.gmail,
-    to: email,
-    subject: `Booking Cancellation Confirmation #${bookingNumber}`,
-    html: `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Booking Cancelled</title>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; background-color: #f9f9f9; }
-        .footer { padding: 15px; text-align: center; font-size: 12px; color: #666; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Booking Cancelled</h1>
-        </div>
-        <div class="content">
-          <h2>Booking #${bookingNumber} has been cancelled</h2>
-          <p><strong>Villa:</strong> ${booking.villaName}</p>
-          <p><strong>Cancelled on:</strong> ${booking.cancelledAt.toLocaleDateString()}</p>
-          ${
-            booking.refundAmount > 0
-              ? `<p><strong>Refund Amount:</strong> ₹${booking.refundAmount.toLocaleString()} (${booking.refundPercentage}%)</p>`
-              : "<p><strong>Refund:</strong> No refund applicable as per cancellation policy</p>"
-          }
-          <p>If you have any questions, please contact us at luxorholidayhomestays@gmail.com</p>
-        </div>
-        <div class="footer">
-          <p>© ${new Date().getFullYear()} LuxorStay Villas</p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `,
+    res.json(bookings)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
+}
 
-  await transporter.sendMail(mailOptions)
+export const getUserBookings = async (req, res) => {
+  try {
+    console.log("[BOOKING] Fetching user bookings with auth:", {
+      userId: req.user?.userId,
+      email: req.user?.email,
+      hasUserObject: !!req.user,
+    })
+
+    if (!req.user) {
+      console.error("[BOOKING] Authentication error: No user object in request")
+      return res.status(401).json({
+        error: "Authentication required",
+        details: "User information not available",
+      })
+    }
+
+    const userId = req.user.userId
+    if (!userId) {
+      console.error("[BOOKING] User ID not found in authentication data")
+      return res.status(400).json({
+        error: "Invalid user data",
+        details: "User ID is required",
+      })
+    }
+
+    let userEmail = req.user.email
+    if (!userEmail) {
+      console.log(`[BOOKING] Email not found in token, looking up user with ID: ${userId}`)
+      const User = await import("../models/User.js")
+      try {
+        const user = await User.default.findById(userId)
+        if (!user) {
+          console.error(`[BOOKING] User not found for ID: ${userId}`)
+          return res.status(404).json({
+            error: "User not found",
+            details: "The user associated with this token does not exist",
+          })
+        }
+        userEmail = user.email
+        console.log(`[BOOKING] Found user email: ${userEmail}`)
+      } catch (err) {
+        console.error(`[BOOKING] Error looking up user: ${err.message}`)
+        return res.status(500).json({
+          error: "Database error",
+          details: "Error retrieving user information",
+        })
+      }
+    }
+
+    console.log(`[BOOKING] Looking for bookings with email: ${userEmail}`)
+    const bookings = await Booking.find({ email: userEmail })
+    console.log(`[BOOKING] Found ${bookings.length} bookings for email ${userEmail}`)
+
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings: bookings,
+    })
+  } catch (err) {
+    console.error("[BOOKING] Error fetching user bookings:", err)
+    res.status(500).json({
+      error: "Failed to fetch bookings",
+      message: err.message,
+    })
+  }
 }
 
 export const getUserAddressInfo = async (req, res) => {

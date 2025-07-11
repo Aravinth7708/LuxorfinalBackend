@@ -3,14 +3,19 @@ import { createRequire } from 'module';
 import Booking from '../models/Booking.js';
 import Villa from '../models/Villa.js';
 import nodemailer from 'nodemailer';
+import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 const require = createRequire(import.meta.url);
 const Razorpay = require('razorpay');
 
-// Initialize Razorpay with exact keys from environment
+
 const razorpay = new Razorpay({
-  key_id: process.env.RazorpayKey, // "rzp_live_quNHH9YfEhaAru"
-  key_secret: process.env.RAZORPAY_SECRET // "KpevVI5be513vvCCWGKuCG7X"
+  key_id: process.env.RazorpayKey, 
+  key_secret: process.env.RAZORPAY_SECRET 
 });
 
 // Add console logs to verify keys are loaded
@@ -319,227 +324,719 @@ export const verifyPayment = async (req, res) => {
   }
 };
 
-// Helper function to send booking confirmation email
+// Get directory name
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Helper function to send booking confirmation email with PDF attachment
 async function sendBookingConfirmation(booking) {
-  // Get villa details
-  const villa = await Villa.findById(booking.villaId);
-  if (!villa) {
-    throw new Error('Villa not found');
+  try {
+    // Get villa details
+    const villa = await Villa.findById(booking.villaId);
+    if (!villa) {
+      throw new Error('Villa not found');
+    }
+
+    // Format dates
+    const checkInDate = new Date(booking.checkIn);
+    const checkOutDate = new Date(booking.checkOut);
+    const formattedCheckIn = checkInDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedCheckOut = checkOutDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    
+    // Create booking number (use first 6 chars of ID)
+    const bookingNumber = String(booking._id).substring(0, 6).toUpperCase();
+    
+    // Generate PDF booking ticket
+    const pdfPath = await generateBookingTicketPDF(booking, villa, formattedCheckIn, formattedCheckOut, bookingNumber);
+
+    // Setup email transport
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.gmail,
+        pass: process.env.pass
+      }
+    });
+
+    // Create email content
+    const mailOptions = {
+      from: process.env.gmail,
+      to: booking.email,
+      subject: `Booking Confirmation #${bookingNumber} - ${villa.name}`,
+      html: `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Booking Confirmation</title>
+        <style>
+          body {
+            font-family: 'Poppins', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+          }
+          
+          .container {
+            max-width: 650px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          }
+          
+          .header {
+            background-color: #16a34a;
+            color: white;
+            padding: 25px 30px;
+            text-align: center;
+          }
+          
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          
+          .booking-details {
+            padding: 25px 30px;
+            border-bottom: 1px solid #eaeaea;
+          }
+          
+          .booking-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+          }
+          
+          .booking-label {
+            font-weight: 500;
+            color: #666;
+          }
+          
+          .booking-value {
+            font-weight: 600;
+            color: #333;
+            text-align: right;
+          }
+          
+          .booking-id {
+            background-color: #f2f7ff;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          
+          .price-breakdown {
+            background-color: #f9f9f9;
+            padding: 20px 30px;
+            border-bottom: 1px solid #eaeaea;
+          }
+          
+          .price-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+          }
+          
+          .price-total {
+            font-size: 18px;
+            font-weight: 700;
+            color: #16a34a;
+            border-top: 2px solid #eaeaea;
+            padding-top: 10px;
+            margin-top: 10px;
+          }
+          
+          .footer {
+            background-color: #f2f7ff;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Booking Confirmation</h1>
+            <p>Payment Successful! Your villa is booked.</p>
+          </div>
+          
+          <div class="booking-details">
+            <div class="booking-id">
+              <span style="font-weight: 700; color: #16a34a; font-size: 18px;">Booking #${bookingNumber}</span>
+            </div>
+            
+            <h2 style="margin-bottom: 20px; color: #16a34a;">${villa.name}</h2>
+            
+            <div class="booking-row">
+              <div class="booking-label">Check-in</div>
+              <div class="booking-value">${formattedCheckIn} ${formatTimeFor12Hour(booking.checkInTime)}</div>
+            </div>
+            
+            <div class="booking-row">
+              <div class="booking-label">Check-out</div>
+              <div class="booking-value">${formattedCheckOut} ${formatTimeFor12Hour(booking.checkOutTime)}</div>
+            </div>
+            
+            <div class="booking-row">
+              <div class="booking-label">Guests</div>
+              <div class="booking-value">${booking.guests} guests${booking.infants > 0 ? `, ${booking.infants} infants` : ''}</div>
+            </div>
+            
+            <div class="booking-row">
+              <div class="booking-label">Location</div>
+              <div class="booking-value">${villa.location || 'Luxury Location'}</div>
+            </div>
+            
+            <div class="booking-row">
+              <div class="booking-label">Status</div>
+              <div class="booking-value" style="color: #16a34a; font-weight: 700;">Confirmed & Paid</div>
+            </div>
+            
+            <div class="booking-row">
+              <div class="booking-label">Booked By</div>
+              <div class="booking-value">${booking.guestName}</div>
+            </div>
+            
+            <div class="booking-row">
+              <div class="booking-label">Payment ID</div>
+              <div class="booking-value">${booking.paymentId}</div>
+            </div>
+          </div>
+          
+          <div class="price-breakdown">
+            <h3 style="margin-top: 0;">Price Details</h3>
+            
+            <div class="price-row">
+              <div class="booking-label">Villa Price</div>
+              <div class="booking-value">₹${Math.round(booking.totalAmount * 0.8).toLocaleString()}</div>
+            </div>
+            
+            <div class="price-row">
+              <div class="booking-label">Taxes & Fees</div>
+              <div class="booking-value">₹${Math.round(booking.totalAmount * 0.2).toLocaleString()}</div>
+            </div>
+            
+            <div class="price-row price-total">
+              <div class="booking-label">Total Amount Paid</div>
+              <div class="booking-value">₹${booking.totalAmount.toLocaleString()}</div>
+            </div>
+          </div>
+          
+          <div style="padding: 20px 30px;">
+            <h3 style="color: #16a34a;">Important Information</h3>
+            <ul style="padding-left: 20px;">
+              <li>Please arrive at the property between ${formatTimeFor12Hour(booking.checkInTime)} and 8:00 PM on your check-in date.</li>
+              <li>A refundable security deposit of ₹20,000 may be collected upon arrival.</li>
+              <li>Please have a valid ID ready for check-in.</li>
+              <li>For any assistance, please contact us at luxorholidayhomestays@gmail.com</li>
+              <li><strong>Your booking ticket is attached as a PDF.</strong> Please save or print it for your records.</li>
+            </ul>
+          </div>
+          
+          <div class="footer">
+            <p>Thank you for choosing LuxorStay Villas!</p>
+            <p>© ${new Date().getFullYear()} LuxorStay Villas. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+      `,
+      attachments: [
+        {
+          filename: `LuxorStay_Booking_${bookingNumber}.pdf`,
+          path: pdfPath,
+          contentType: 'application/pdf'
+        }
+      ]
+    };
+
+    // Send email with PDF attachment
+    await transporter.sendMail(mailOptions);
+    
+    // Clean up - remove temporary PDF file
+    fs.unlinkSync(pdfPath);
+    
+    console.log(`[EMAIL] Booking confirmation with PDF ticket sent to ${booking.email}`);
+    
+  } catch (error) {
+    console.error("[EMAIL] Error sending booking confirmation:", error);
+    throw error;
   }
+}
 
-  // Format dates
-  const checkInDate = new Date(booking.checkIn);
-  const checkOutDate = new Date(booking.checkOut);
-  const formattedCheckIn = checkInDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const formattedCheckOut = checkOutDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  
-  // Create booking number (use first 6 chars of ID)
-  const bookingNumber = String(booking._id).substring(0, 6).toUpperCase();
+// Function to generate PDF booking ticket with improved alignment and design
+async function generateBookingTicketPDF(booking, villa, formattedCheckIn, formattedCheckOut, bookingNumber) {
+  return new Promise((resolve, reject) => {
+    try {
+      // Create a PDF document
+      const doc = new PDFDocument({
+        size: "A4",
+        margins: { top: 40, bottom: 40, left: 40, right: 40 },
+      });
 
-  // Setup email transport
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.gmail,
-      pass: process.env.pass
+      // Ensure temp directory exists
+      const tempDir = path.join(__dirname, "../temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      // Set PDF file path
+      const pdfFileName = `booking_${booking._id}.pdf`;
+      const pdfPath = path.join(tempDir, pdfFileName);
+      
+      // Pipe PDF to file
+      const stream = fs.createWriteStream(pdfPath);
+      doc.pipe(stream);
+
+      // Calculate nights
+      const totalNights = booking.totalDays || Math.ceil((new Date(booking.checkOut) - new Date(booking.checkIn)) / (1000 * 60 * 60 * 24));
+      
+      // Calculate financial details
+      const basePrice = Math.round(booking.totalAmount * 0.8);
+      const taxesAndFees = Math.round(booking.totalAmount * 0.2);
+      const totalAmount = booking.totalAmount;
+
+      // -------- HEADER SECTION --------
+      doc.font("Helvetica-Bold")
+         .fontSize(22)
+         .fillColor("#16a34a") // Green color for the header
+         .text("Booking Confirmation", { align: "center" });
+      
+      // -------- BOOKING ID SECTION --------
+      doc.moveDown(0.5);
+      doc.fontSize(12)
+         .fillColor("#666666")
+         .text("Booking Reference", { align: "left" });
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(16)
+         .fillColor("#f59e0b") // Amber color for the booking number
+         .text(`#${bookingNumber}`, { align: "left" });
+      
+      doc.moveDown(1);
+      
+      // -------- VILLA & MAIN INFO SECTION --------
+      // Create a light gray background for the villa card
+      const villaCardY = doc.y;
+      doc.rect(40, villaCardY, doc.page.width - 80, 90)
+         .fillColor("#f9fafb") // Very light gray background
+         .fill();
+      
+      // Add villa name and location
+      doc.fillColor("#111827") // Dark text color
+         .font("Helvetica-Bold")
+         .fontSize(18)
+         .text(villa.name, 50, villaCardY + 15);
+      
+      if (villa.location) {
+        doc.font("Helvetica")
+           .fontSize(12)
+           .fillColor("#4b5563") // Gray text for location
+           .text(villa.location, 50, villaCardY + 38);
+      }
+      
+      // -------- BOOKING DETAILS SECTION --------
+      doc.moveDown(3);
+      
+      // Create a clean table layout with two columns
+      const startY = doc.y;
+      const colWidth = (doc.page.width - 90) / 2;
+      
+      // First row - Check-in and Check-out
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#6b7280") // Gray text for labels
+         .text("Check-in", 50, startY);
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text("Check-out", 50 + colWidth, startY);
+      
+      doc.moveDown(0.3);
+      
+      // Calendar icon and date
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#111827") // Dark text for values
+         .text(`${formattedCheckIn.split(',')[0]}, ${formattedCheckIn.split(',')[1]}`, 50, doc.y);
+      
+      doc.font("Helvetica")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text(`${formatTimeFor12Hour(booking.checkInTime)}`, 50, doc.y + 15);
+      
+      // Check-out date on the right
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`${formattedCheckOut.split(',')[0]}, ${formattedCheckOut.split(',')[1]}`, 50 + colWidth, startY + 18);
+      
+      doc.font("Helvetica")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text(`${formatTimeFor12Hour(booking.checkOutTime)}`, 50 + colWidth, doc.y - 15);
+      
+      doc.moveDown(1.5);
+      
+      // Second row - Guests and Duration
+      const secondRowY = doc.y;
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text("Guests", 50, secondRowY);
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text("Duration", 50 + colWidth, secondRowY);
+      
+      doc.moveDown(0.3);
+      
+      // Guests count
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`${booking.guests} Guest${booking.guests > 1 ? 's' : ''}`, 50, doc.y);
+      
+      // Duration on the right
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`${totalNights} Night${totalNights > 1 ? 's' : ''}`, 50 + colWidth, doc.y);
+      
+      doc.moveDown(1.5);
+      
+      // Third row - Total Amount
+      const thirdRowY = doc.y;
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text("Total Amount", 50, thirdRowY);
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#6b7280")
+         .text("Status", 50 + colWidth, thirdRowY);
+      
+      doc.moveDown(0.3);
+      
+      // Total Amount with rupee symbol
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`₹${totalAmount}`, 50, doc.y);
+      
+      // Show status with confirmed - FIX: Don't use radius method
+      // Instead, just draw a filled rectangle
+      doc.fillColor("#d1fae5") // Light green background
+         .rect(50 + colWidth, doc.y - 5, 80, 22)
+         .fill();
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#10b981") // Green text for confirmed
+         .text("Confirmed", 50 + colWidth + 10, doc.y);
+      
+      doc.moveDown(2);
+      
+      // -------- GUEST INFORMATION SECTION --------
+      doc.font("Helvetica-Bold")
+         .fontSize(14)
+         .fillColor("#111827")
+         .text("Guest Information");
+      
+      doc.moveDown(0.5);
+      
+      // Create a table for guest details
+      const guestInfoY = doc.y;
+      
+      // Guest Contact Information header
+      doc.font("Helvetica")
+         .fontSize(10)
+         .fillColor("#6b7280")
+         .text("Guest Contact Information", 50, guestInfoY);
+      
+      doc.moveDown(0.3);
+      
+      // Guest name 
+      doc.font("Helvetica-Bold")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(booking.guestName, 50, doc.y);
+      
+      doc.moveDown(0.8);
+      
+      // Email label and value
+      doc.font("Helvetica")
+         .fontSize(10)
+         .fillColor("#6b7280")
+         .text("Email", 50, doc.y);
+      
+      doc.moveDown(0.3);
+      
+      doc.font("Helvetica")
+         .fontSize(11)
+         .fillColor("#111827")
+         .text(booking.email, 50, doc.y);
+      
+      doc.moveDown(0.8);
+      
+      // Contact Number label and value
+      doc.font("Helvetica")
+         .fontSize(10)
+         .fillColor("#6b7280")
+         .text("Contact Number", 50, doc.y);
+      
+      doc.moveDown(0.3);
+      
+      // Show phone with verified tag if available
+      if (booking.phone) {
+        doc.font("Helvetica")
+           .fontSize(11)
+           .fillColor("#111827")
+           .text(booking.phone, 50, doc.y);
+        
+        // Verified pill for phone - FIX: Don't use radius method
+        doc.fillColor("#dcfce7") // Very light green
+           .rect(110, doc.y - 2, 58, 18)
+           .fill();
+        
+        doc.font("Helvetica")
+           .fontSize(9)
+           .fillColor("#16a34a") // Green text
+           .text("Verified", 118, doc.y);
+      } else {
+        doc.font("Helvetica")
+           .fontSize(11)
+           .fillColor("#6b7280")
+           .text("Not provided", 50, doc.y);
+      }
+      
+      // If booking has address, show it
+      if (booking.address && (booking.address.street || booking.address.city)) {
+        doc.moveDown(0.8);
+        
+        doc.font("Helvetica")
+           .fontSize(10)
+           .fillColor("#6b7280")
+           .text("Contact Address", 50, doc.y);
+        
+        doc.moveDown(0.3);
+        
+        const addressParts = [
+          booking.address.street,
+          booking.address.city,
+          booking.address.state,
+          booking.address.country,
+          booking.address.zipCode
+        ].filter(Boolean);
+        
+        doc.font("Helvetica")
+           .fontSize(11)
+           .fillColor("#111827")
+           .text(addressParts.join(", "), 50, doc.y, {
+             width: doc.page.width - 100,
+             align: 'left'
+           });
+      }
+      
+      doc.moveDown(0.8);
+      
+      // Account Type
+      doc.font("Helvetica")
+         .fontSize(10)
+         .fillColor("#6b7280")
+         .text("Account Type", 50, doc.y);
+      
+      doc.moveDown(0.3);
+      
+      doc.font("Helvetica")
+         .fontSize(11)
+         .fillColor("#111827")
+         .text(booking.phone ? "Phone Verified User" : "Email User", 50, doc.y);
+      
+      doc.moveDown(2);
+      
+      // -------- PAYMENT DETAILS SECTION --------
+      doc.font("Helvetica-Bold")
+         .fontSize(14)
+         .fillColor("#111827")
+         .text("Payment Details");
+      
+      doc.moveDown(0.5);
+      
+      const paymentY = doc.y;
+      
+      // Base Price
+      doc.font("Helvetica")
+         .fontSize(12)
+         .fillColor("#6b7280")
+         .text(`Base Price × ${totalNights} nights`, 50, paymentY);
+      
+      doc.font("Helvetica")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`₹${basePrice}`, doc.page.width - 60, paymentY, { align: "right" });
+      
+      // Service Fee
+      doc.font("Helvetica")
+         .fontSize(12)
+         .fillColor("#6b7280")
+         .text("Service Fee (5%)", 50, paymentY + 25);
+      
+      doc.font("Helvetica")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`₹${Math.round(booking.totalAmount * 0.05)}`, doc.page.width - 60, paymentY + 25, { align: "right" });
+      
+      // Taxes
+      doc.font("Helvetica")
+         .fontSize(12)
+         .fillColor("#6b7280")
+         .text("Taxes (15%)", 50, paymentY + 50);
+      
+      doc.font("Helvetica")
+         .fontSize(12)
+         .fillColor("#111827")
+         .text(`₹${taxesAndFees - Math.round(booking.totalAmount * 0.05)}`, doc.page.width - 60, paymentY + 50, { align: "right" });
+      
+      // Line before total
+      doc.moveTo(50, paymentY + 75).lineTo(doc.page.width - 40, paymentY + 75).strokeColor("#e5e7eb").stroke();
+      
+      // Total Amount
+      doc.font("Helvetica-Bold")
+         .fontSize(13)
+         .fillColor("#111827")
+         .text("Total Amount", 50, paymentY + 85);
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(13)
+         .fillColor("#f59e0b") // Amber color for the total
+         .text(`₹${totalAmount}`, doc.page.width - 60, paymentY + 85, { align: "right" });
+      
+      doc.moveDown(0.8);
+      
+      // Payment status and method section
+      const statusY = doc.y + 10;
+      
+      doc.rect(40, statusY, doc.page.width - 80, 50)
+         .fillColor("#f9fafb") // Very light gray background
+         .fill();
+      
+      // Payment Status
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#4b5563")
+         .text("Payment Status:", 50, statusY + 15);
+      
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#16a34a") // Green color for paid
+         .text("Paid", 150, statusY + 15);
+      
+      // Payment Method
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#4b5563")
+         .text("Payment Method:", 50, statusY + 35);
+      
+      doc.font("Helvetica")
+         .fontSize(11)
+         .fillColor("#111827")
+         .text(booking.paymentMethod || "UPI", 150, statusY + 35);
+      
+      // Payment ID on the right
+      doc.font("Helvetica-Bold")
+         .fontSize(11)
+         .fillColor("#4b5563")
+         .text("Transaction ID:", doc.page.width / 2, statusY + 15);
+      
+      // Cut payment ID if too long
+      let paymentId = booking.paymentId || "pay_OnlyQxhxCITXFI";
+      if (paymentId.length > 20) {
+        paymentId = paymentId.substring(0, 20) + "...";
+      }
+      
+      doc.font("Helvetica")
+         .fontSize(11)
+         .fillColor("#111827")
+         .text(paymentId, doc.page.width / 2 + 85, statusY + 15);
+      
+      doc.moveDown(4);
+      
+      // -------- IMPORTANT INFORMATION SECTION --------
+      doc.font("Helvetica-Bold")
+         .fontSize(14)
+         .fillColor("#111827")
+         .text("Important Information");
+      
+      doc.moveDown(0.5);
+      
+      // Create bullet points like the mobile image
+      const bulletPoints = [
+        `Please arrive at the property between ${formatTimeFor12Hour(booking.checkInTime)} and 8:00 PM on your check-in date.`,
+        `Check-out time is before ${formatTimeFor12Hour(booking.checkOutTime)}.`,
+        `A refundable security deposit of ₹20,000 may be collected upon arrival.`,
+        `Please present this confirmation along with a valid ID at check-in.`,
+        `For any assistance, contact us at +91 79040 40739 or luxorholidayhomestays@gmail.com`
+      ];
+      
+      bulletPoints.forEach((point, i) => {
+        const bulletY = doc.y;
+        
+        // Draw bullet point
+        doc.font("Helvetica")
+           .fontSize(10)
+           .fillColor("#111827")
+           .text("•", 50, bulletY);
+        
+        // Draw text with wrapping
+        doc.font("Helvetica")
+           .fontSize(10)
+           .fillColor("#111827")
+           .text(point, 65, bulletY, {
+             width: doc.page.width - 105,
+             align: 'left'
+           });
+        
+        doc.moveDown(0.5);
+      });
+      
+      // -------- FOOTER SECTION --------
+      const footerY = doc.page.height - 30;
+      doc.font("Helvetica")
+         .fontSize(9)
+         .fillColor("#6b7280")
+         .text("Thank you for choosing Luxor Stay Villas!", { align: "center" });
+      
+      // Finalize the PDF
+      doc.end();
+      
+      // Wait for stream to finish
+      stream.on("finish", () => {
+        resolve(pdfPath);
+      });
+      
+      stream.on("error", (err) => {
+        reject(err);
+      });
+      
+    } catch (error) {
+      reject(error);
     }
   });
-
-  // Create email content
-  const mailOptions = {
-    from: process.env.gmail,
-    to: booking.email,
-    subject: `Booking Confirmation #${bookingNumber} - ${villa.name}`,
-    html: `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Booking Confirmation</title>
-      <style>
-        body {
-          font-family: 'Poppins', Arial, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          margin: 0;
-          padding: 0;
-          background-color: #f5f5f5;
-        }
-        
-        .container {
-          max-width: 650px;
-          margin: 20px auto;
-          background: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .header {
-          background-color: #16a34a;
-          color: white;
-          padding: 25px 30px;
-          text-align: center;
-        }
-        
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-        }
-        
-        .booking-details {
-          padding: 25px 30px;
-          border-bottom: 1px solid #eaeaea;
-        }
-        
-        .booking-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 12px;
-        }
-        
-        .booking-label {
-          font-weight: 500;
-          color: #666;
-        }
-        
-        .booking-value {
-          font-weight: 600;
-          color: #333;
-          text-align: right;
-        }
-        
-        .booking-id {
-          background-color: #f2f7ff;
-          padding: 12px;
-          border-radius: 6px;
-          text-align: center;
-          margin-bottom: 20px;
-        }
-        
-        .price-breakdown {
-          background-color: #f9f9f9;
-          padding: 20px 30px;
-          border-bottom: 1px solid #eaeaea;
-        }
-        
-        .price-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 10px;
-        }
-        
-        .price-total {
-          font-size: 18px;
-          font-weight: 700;
-          color: #16a34a;
-          border-top: 2px solid #eaeaea;
-          padding-top: 10px;
-          margin-top: 10px;
-        }
-        
-        .footer {
-          background-color: #f2f7ff;
-          padding: 20px 30px;
-          text-align: center;
-          font-size: 14px;
-          color: #666;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Booking Confirmation</h1>
-          <p>Payment Successful! Your villa is booked.</p>
-        </div>
-        
-        <div class="booking-details">
-          <div class="booking-id">
-            <span style="font-weight: 700; color: #16a34a; font-size: 18px;">Booking #${bookingNumber}</span>
-          </div>
-          
-          <h2 style="margin-bottom: 20px; color: #16a34a;">${villa.name}</h2>
-          
-          <div class="booking-row">
-            <div class="booking-label">Check-in</div>
-            <div class="booking-value">${formattedCheckIn} ${formatTimeFor12Hour(booking.checkInTime)}</div>
-          </div>
-          
-          <div class="booking-row">
-            <div class="booking-label">Check-out</div>
-            <div class="booking-value">${formattedCheckOut} ${formatTimeFor12Hour(booking.checkOutTime)}</div>
-          </div>
-          
-          <div class="booking-row">
-            <div class="booking-label">Guests</div>
-            <div class="booking-value">${booking.guests} guests${booking.infants > 0 ? `, ${booking.infants} infants` : ''}</div>
-          </div>
-          
-          <div class="booking-row">
-            <div class="booking-label">Location</div>
-            <div class="booking-value">${villa.location || 'Luxury Location'}</div>
-          </div>
-          
-          <div class="booking-row">
-            <div class="booking-label">Status</div>
-            <div class="booking-value" style="color: #16a34a; font-weight: 700;">Confirmed & Paid</div>
-          </div>
-          
-          <div class="booking-row">
-            <div class="booking-label">Booked By</div>
-            <div class="booking-value">${booking.guestName}</div>
-          </div>
-          
-          <div class="booking-row">
-            <div class="booking-label">Payment ID</div>
-            <div class="booking-value">${booking.paymentId}</div>
-          </div>
-        </div>
-        
-        <div class="price-breakdown">
-          <h3 style="margin-top: 0;">Price Details</h3>
-          
-          <div class="price-row">
-            <div class="booking-label">Villa Price</div>
-            <div class="booking-value">₹${Math.round(booking.totalAmount * 0.8).toLocaleString()}</div>
-          </div>
-          
-          <div class="price-row">
-            <div class="booking-label">Taxes & Fees</div>
-            <div class="booking-value">₹${Math.round(booking.totalAmount * 0.2).toLocaleString()}</div>
-          </div>
-          
-          <div class="price-row price-total">
-            <div class="booking-label">Total Amount Paid</div>
-            <div class="booking-value">₹${booking.totalAmount.toLocaleString()}</div>
-          </div>
-        </div>
-        
-        <div style="padding: 20px 30px;">
-          <h3 style="color: #16a34a;">Important Information</h3>
-          <ul style="padding-left: 20px;">
-            <li>Please arrive at the property between ${formatTimeFor12Hour(booking.checkInTime)} and 8:00 PM on your check-in date.</li>
-            <li>A refundable security deposit of ₹20,000 may be collected upon arrival.</li>
-            <li>Please have a valid ID ready for check-in.</li>
-            <li>For any assistance, please contact us at luxorholidayhomestays@gmail.com</li>
-          </ul>
-        </div>
-        
-        <div class="footer">
-          <p>Thank you for choosing LuxorStay Villas!</p>
-          <p>© ${new Date().getFullYear()} LuxorStay Villas. All rights reserved.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `
-  };
-
-  // Send email
-  await transporter.sendMail(mailOptions);
 }
 
 // Get payment details for a specific booking
