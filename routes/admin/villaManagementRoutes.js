@@ -1,6 +1,6 @@
 import express from 'express';
 import * as villaManagementController from '../controllers/villaManagementController.js';
-import { authMiddleware, adminMiddleware } from '../middleware/authMiddleware.js';
+import { authMiddleware, adminMiddleware } from '../../middleware/authMiddleware.js';
 
 const router = express.Router();
 

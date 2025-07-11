@@ -1,4 +1,4 @@
-import Villa from '../models/Villa.js';
+import Villa from '../../models/Villa.js';
 import mongoose from 'mongoose';
 
 // Create a new villa

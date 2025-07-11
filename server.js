@@ -21,9 +21,12 @@ import contactRoutes from './routes/contactRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
-import adminPhoneUserRoutes from './routes/adminPhoneUserRoutes.js';
-// Add this import at the top of your server.js file with your other imports
-// import profileRoutes from './routes/profileRoutes.js';
+import adminPhoneUserRoutes from './routes/admin/adminPhoneUserRoutes.js';
+import cancelRequestRoutes from './routes/admin/cancelRequestRoutes.js'; // Add this import with your other imports
+import amenitiesRoutes from './routes/admin/amenitiesRoutes.js'; // Add this import with your other imports
+import userProfileRoutes from './routes/admin/userProfileRoutes.js';
+import adminNewsletterRoutes from './routes/admin/newsletterRoutes.js';
+
 connectDB()
   .then(() => console.log('Database connection established'))
   .catch(err => {
@@ -124,6 +127,10 @@ app.use('/api', profileRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/complete/profile', phoneProfileRoutes); // No auth middleware
 app.use('/api/admin', adminPhoneUserRoutes); // Admin-only routes for phone user management
+app.use('/api/cancel-requests', cancelRequestRoutes); // Add this line with your other route registrations
+app.use('/api/admin/amenities', amenitiesRoutes); // Add this line with your other route registrations
+app.use('/api/admin/newsletter', adminNewsletterRoutes);
+app.use('/api/admin/user-profiles', userProfileRoutes);
 
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;

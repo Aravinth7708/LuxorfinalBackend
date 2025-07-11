@@ -1,197 +1,187 @@
 import PhoneUser from '../models/PhoneUser.js';
 
-// Get all phone users (admin only)
+// Get all phone users
 export const getAllPhoneUsers = async (req, res) => {
   try {
-    // Check if requester is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
-    }
-
-    // Get all phone users
-    const users = await PhoneUser.find({})
-      .sort({ createdAt: -1 }) // Newest first
-      .select('-__v'); // Exclude version field
-    
-    return res.status(200).json({ 
-      success: true, 
-      count: users.length,
-      users 
+    const phoneUsers = await PhoneUser.find().sort({ createdAt: -1 });
+    res.status(200).json({
+      success: true,
+      users: phoneUsers
     });
   } catch (error) {
-    console.error('[ADMIN] Error fetching phone users:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      message: 'Failed to fetch phone users'
+    console.error('Error fetching phone users:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch phone users', 
+      message: error.message 
     });
   }
 };
 
-// Get single phone user by ID (admin only)
+// Get phone user by ID
 export const getPhoneUserById = async (req, res) => {
   try {
-    // Check if requester is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+    const phoneUser = await PhoneUser.findById(req.params.id);
+    if (!phoneUser) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Phone user not found' 
+      });
     }
-
-    const { id } = req.params;
-    
-    // Find the user
-    const user = await PhoneUser.findById(id);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    return res.status(200).json({ 
-      success: true, 
-      user 
+    res.status(200).json({
+      success: true,
+      user: phoneUser
     });
   } catch (error) {
-    console.error('[ADMIN] Error fetching phone user:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      message: 'Failed to fetch phone user details'
+    console.error('Error fetching phone user:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch phone user', 
+      message: error.message 
     });
   }
 };
 
-// Update phone user details (admin only)
-export const updatePhoneUser = async (req, res) => {
-  try {
-    // Check if requester is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
-    }
-
-    const { id } = req.params;
-    const { name, email, isEmailVerified, role } = req.body;
-    
-    // Find and update the user
-    const user = await PhoneUser.findById(id);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Update fields if provided
-    if (name) user.name = name;
-    if (email) user.email = email;
-    if (isEmailVerified !== undefined) user.isEmailVerified = isEmailVerified;
-    if (role) user.role = role;
-    
-    await user.save();
-    
-    return res.status(200).json({ 
-      success: true, 
-      message: 'User updated successfully',
-      user 
-    });
-  } catch (error) {
-    console.error('[ADMIN] Error updating phone user:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      message: 'Failed to update phone user'
-    });
-  }
-};
-
-// Create a new phone user (admin only)
+// Create a new phone user
 export const createPhoneUser = async (req, res) => {
   try {
-    // Check if requester is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
-    }
-
-    const { name, phoneNumber, email, role, isEmailVerified } = req.body;
-    
-    // Validation
-    if (!name || !phoneNumber) {
-      return res.status(400).json({ 
-        error: 'Validation failed', 
-        message: 'Name and phone number are required' 
-      });
-    }
+    const { name, phoneNumber, email, role, isEmailVerified, profilePicture, firebaseUid } = req.body;
     
     // Check if phone number already exists
-    const existingUserByPhone = await PhoneUser.findOne({ phoneNumber });
-    if (existingUserByPhone) {
-      return res.status(409).json({ 
-        error: 'Validation failed', 
-        message: 'Phone number is already registered' 
+    const existingUser = await PhoneUser.findOne({ phoneNumber });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Phone number already registered' 
       });
     }
     
-    // Check if email already exists (if provided)
+    // Check if email exists if provided
     if (email) {
-      const existingUserByEmail = await PhoneUser.findOne({ email });
-      if (existingUserByEmail) {
-        return res.status(409).json({ 
-          error: 'Validation failed', 
-          message: 'Email is already registered' 
+      const emailExists = await PhoneUser.findOne({ email });
+      if (emailExists) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Email already registered' 
         });
       }
     }
-    
-    // Create new phone user
-    const newUser = new PhoneUser({
+
+    const newPhoneUser = new PhoneUser({
       name,
       phoneNumber,
       email,
       role: role || 'user',
       isEmailVerified: isEmailVerified || false,
-      isPhoneVerified: true, // Admin-created users have verified phone
-      isVerified: true,
-      lastLogin: null
+      profilePicture,
+      firebaseUid,
+      lastLogin: new Date()
     });
-    
-    await newUser.save();
-    
-    return res.status(201).json({ 
+
+    await newPhoneUser.save();
+    res.status(201).json({ 
       success: true, 
-      message: 'Phone user created successfully',
-      user: newUser 
+      message: 'Phone user created successfully', 
+      user: newPhoneUser 
     });
   } catch (error) {
-    console.error('[ADMIN] Error creating phone user:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      message: 'Failed to create phone user'
+    console.error('Error creating phone user:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create phone user', 
+      message: error.message 
     });
   }
 };
 
-// Delete phone user (admin only)
-export const deletePhoneUser = async (req, res) => {
+// Update an existing phone user
+export const updatePhoneUser = async (req, res) => {
   try {
-    // Check if requester is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+    const { name, phoneNumber, email, role, isEmailVerified, profilePicture } = req.body;
+    
+    // Check if phone user exists
+    const phoneUser = await PhoneUser.findById(req.params.id);
+    if (!phoneUser) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Phone user not found' 
+      });
+    }
+    
+    // Check if new phone number already exists with a different user
+    if (phoneNumber && phoneNumber !== phoneUser.phoneNumber) {
+      const phoneExists = await PhoneUser.findOne({ phoneNumber });
+      if (phoneExists) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Phone number already registered to another user' 
+        });
+      }
+    }
+    
+    // Check if new email already exists with a different user
+    if (email && email !== phoneUser.email) {
+      const emailExists = await PhoneUser.findOne({ email });
+      if (emailExists) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Email already registered to another user' 
+        });
+      }
     }
 
-    const { id } = req.params;
-    
-    // Find and delete the user
-    const user = await PhoneUser.findById(id);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    await PhoneUser.deleteOne({ _id: id });
-    
-    return res.status(200).json({ 
+    // Update the phone user
+    const updatedPhoneUser = await PhoneUser.findByIdAndUpdate(
+      req.params.id, 
+      { 
+        name, 
+        phoneNumber, 
+        email, 
+        role, 
+        isEmailVerified, 
+        profilePicture 
+      },
+      { new: true }
+    );
+
+    res.status(200).json({ 
       success: true, 
-      message: 'User deleted successfully',
-      id 
+      message: 'Phone user updated successfully', 
+      user: updatedPhoneUser 
     });
   } catch (error) {
-    console.error('[ADMIN] Error deleting phone user:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      message: 'Failed to delete phone user'
+    console.error('Error updating phone user:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update phone user', 
+      message: error.message 
+    });
+  }
+};
+
+// Delete a phone user
+export const deletePhoneUser = async (req, res) => {
+  try {
+    const phoneUser = await PhoneUser.findById(req.params.id);
+    if (!phoneUser) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Phone user not found' 
+      });
+    }
+    
+    await PhoneUser.findByIdAndDelete(req.params.id);
+    res.status(200).json({ 
+      success: true, 
+      message: 'Phone user deleted successfully',
+      id: req.params.id
+    });
+  } catch (error) {
+    console.error('Error deleting phone user:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to delete phone user', 
+      message: error.message 
     });
   }
 };
