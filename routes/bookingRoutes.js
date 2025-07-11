@@ -6,7 +6,8 @@ const router = express.Router()
 
 // Create a new booking
 router.post("/create", authMiddleware, bookingController.createBooking)
-
+// Add this to your existing routes
+router.get('/guest-details', bookingController.getBookingGuestDetails);
 // Search bookings by date range
 router.get("/search", bookingController.searchBookings)
 

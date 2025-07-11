@@ -524,7 +524,7 @@ async function sendBookingConfirmation(booking) {
             <li>Please arrive at the property between ${formatTimeFor12Hour(booking.checkInTime)} and 8:00 PM on your check-in date.</li>
             <li>A refundable security deposit of ₹20,000 may be collected upon arrival.</li>
             <li>Please have a valid ID ready for check-in.</li>
-            <li>For any assistance, please contact us at support@luxorstayvillas.com</li>
+            <li>For any assistance, please contact us at luxorholidayhomestays@gmail.com</li>
           </ul>
         </div>
         

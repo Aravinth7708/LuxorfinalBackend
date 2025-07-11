@@ -197,7 +197,7 @@ async function sendBookingEmail(email, booking, villa) {
           <p><strong>Status:</strong> Confirmed</p>
         </div>
         <div class="footer">
-          <p>For questions, contact us at support@luxorstayvillas.com</p>
+          <p>For questions, contact us at luxorholidayhomestays@gmail.com</p>
           <p>© ${new Date().getFullYear()} LuxorStay Villas. All rights reserved.</p>
         </div>
       </div>
@@ -492,7 +492,7 @@ async function sendCancellationEmail(email, booking) {
               ? `<p><strong>Refund Amount:</strong> ₹${booking.refundAmount.toLocaleString()} (${booking.refundPercentage}%)</p>`
               : "<p><strong>Refund:</strong> No refund applicable as per cancellation policy</p>"
           }
-          <p>If you have any questions, please contact us at support@luxorstayvillas.com</p>
+          <p>If you have any questions, please contact us at luxorholidayhomestays@gmail.com</p>
         </div>
         <div class="footer">
           <p>© ${new Date().getFullYear()} LuxorStay Villas</p>
@@ -740,3 +740,98 @@ export const getBlockedDates = async (req, res) => {
     res.status(500).json({ message: "Error fetching blocked dates", error: err.message })
   }
 }
+
+// Get booking guest details by email
+export const getBookingGuestDetails = async (req, res) => {
+  try {
+    const { email } = req.query;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email parameter is required"
+      });
+    }
+
+    console.log(`[BOOKING_GUEST] Fetching guest details for email: ${email}`);
+
+    // Find phone user data
+    let phoneUserData = null;
+    try {
+      phoneUserData = await PhoneUser.findOne({ email });
+      console.log(`[BOOKING_GUEST] Phone user data found: ${!!phoneUserData}`);
+    } catch (err) {
+      console.error("[BOOKING_GUEST] Error fetching phone user data:", err);
+    }
+
+    // Find address from latest booking
+    let bookingAddress = null;
+    try {
+      const latestBooking = await Booking.findOne({ email })
+        .where('address.street').exists(true)
+        .where('address.street').ne("")
+        .sort({ createdAt: -1 });
+      
+      if (latestBooking && latestBooking.address) {
+        bookingAddress = latestBooking.address;
+        console.log(`[BOOKING_GUEST] Address found from booking: ${latestBooking._id}`);
+      }
+    } catch (err) {
+      console.error("[BOOKING_GUEST] Error fetching booking address:", err);
+    }
+
+    // Find user profile data as fallback
+    let userProfileData = null;
+    try {
+      // If email is provided by a regular user, find their profile
+      const user = await User.findOne({ email });
+      if (user) {
+        userProfileData = await UserProfile.findOne({ userId: user._id });
+        console.log(`[BOOKING_GUEST] User profile data found: ${!!userProfileData}`);
+      }
+    } catch (err) {
+      console.error("[BOOKING_GUEST] Error fetching user profile data:", err);
+    }
+
+    // Combine data with priority
+    const guestDetails = {
+      // Contact information - prioritize phone user data
+      name: phoneUserData?.name || userProfileData?.name || "",
+      email: email,
+      phone: phoneUserData?.phoneNumber || userProfileData?.phone || "",
+      countryCode: phoneUserData?.countryCode || userProfileData?.countryCode || "+91",
+      profileImage: phoneUserData?.profileImage || userProfileData?.profileImage || "",
+
+      // Address information - prioritize booking address
+      address: {
+        street: bookingAddress?.street || userProfileData?.address || phoneUserData?.address || "",
+        city: bookingAddress?.city || userProfileData?.city || phoneUserData?.city || "",
+        state: bookingAddress?.state || userProfileData?.state || phoneUserData?.state || "",
+        country: bookingAddress?.country || userProfileData?.country || phoneUserData?.country || "",
+        zipCode: bookingAddress?.zipCode || userProfileData?.zipCode || phoneUserData?.zipCode || "",
+      }
+    };
+
+    // Sources for auditing/debugging
+    const dataSources = {
+      hasPhoneUserData: !!phoneUserData,
+      hasBookingAddress: !!bookingAddress,
+      hasUserProfileData: !!userProfileData
+    };
+
+    return res.status(200).json({
+      success: true,
+      guestDetails,
+      dataSources
+    });
+  } catch (err) {
+    console.error("[BOOKING_GUEST] Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching guest details",
+      error: err.message
+    });
+  }
+};
+
+
