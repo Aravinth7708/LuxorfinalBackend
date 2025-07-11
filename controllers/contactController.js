@@ -239,7 +239,6 @@ export const submitContactForm = async (req, res) => {
       });
     }
 
-    // Return properly structured success response
     return res.status(200).json({
       success: true,
       message: 'Your message has been sent successfully!',
