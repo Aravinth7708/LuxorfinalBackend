@@ -9,7 +9,8 @@ router.get('/check-address-phone-number-exists-inbooking-profile', authMiddlewar
 
 // Get user profile data
 router.get('/', authMiddleware, profileController.getUserProfile);
-
+// Add this route to profileRoutes.js
+router.get('/check-phone', authMiddleware, profileController.checkPhoneExists);
 
 router.put('/update', authMiddleware, profileController.updateUserProfile);
 

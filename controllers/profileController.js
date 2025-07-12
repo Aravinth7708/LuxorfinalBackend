@@ -1,7 +1,7 @@
 import UserProfile from "../models/UserProfile.js"
 import PhoneUser from "../models/PhoneUser.js"
 import Booking from "../models/Booking.js"
-
+import User from "../models/User.js";
 export const checkaddressinbooking = async (req, res) => {
   const { gmail } = req.body
 
@@ -258,3 +258,37 @@ export const updatePhoneNumber = async (req, res) => {
     })
   }
 }
+
+
+export const checkPhoneExists = async (req, res) => {
+  try {
+    const { phoneNumber } = req.query;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number is required'
+      });
+    }
+    
+    // Check in PhoneUser collection
+    const phoneUser = await PhoneUser.findOne({ phoneNumber });
+    
+    // Also check if another regular user has this phone number
+    const regularUser = await User.findOne({ phone: phoneNumber });
+    
+    // Return whether the phone exists or not
+    res.status(200).json({
+      success: true,
+      exists: !!phoneUser || !!regularUser,
+      // Don't include user details for security reasons
+    });
+  } catch (error) {
+    console.error('Error checking phone:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error',
+      message: error.message
+    });
+  }
+};
