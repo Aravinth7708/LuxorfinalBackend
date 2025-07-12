@@ -1,5 +1,6 @@
-import Booking from "../models/Booking.js"
-import Villa from "../models/Villa.js"
+import mongoose from 'mongoose';
+import Booking from '../models/Booking.js';
+import Villa from '../models/Villa.js';
 import UserProfile from "../models/UserProfile.js";
 import User from "../models/User.js";
 import PhoneUser from "../models/PhoneUser.js";
@@ -521,42 +522,57 @@ export const getBookingById = async (req, res) => {
   }
 }
 
+// Add this function to your bookingController.js
 export const checkAvailability = async (req, res) => {
   try {
-    const { villaId, checkIn, checkOut } = req.query
+    const { villaId } = req.query;
+    
+    console.log("[BOOKING] Checking availability for villa:", villaId);
 
     if (!villaId) {
       return res.status(400).json({
         success: false,
-        message: "villaId is required",
-      })
+        message: "villaId parameter is required"
+      });
     }
 
-    const overlappingBookings = await Booking.find({
-      villaId: villaId,
-      status: { $ne: "cancelled" },
-      $or: [
-        {
-          checkIn: { $lte: new Date(checkOut || "2999-12-31") },
-          checkOut: { $gte: new Date(checkIn || "1900-01-01") },
-        },
-      ],
-    })
+    // Validate that villaId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(villaId)) {
+      console.error("[BOOKING] Invalid villaId format:", villaId);
+      return res.status(400).json({
+        success: false,
+        message: "Invalid villa ID format"
+      });
+    }
+
+    // Find all confirmed bookings for this villa
+    const bookings = await Booking.find({
+      villaId,
+      status: { $ne: "cancelled" }
+    }).select('checkIn checkOut _id');
+
+    console.log(`[BOOKING] Found ${bookings.length} bookings for villa ${villaId}`);
+
+    // Format the blocked dates for response
+    const blockedDates = bookings.map(booking => ({
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      bookingId: booking._id.toString()
+    }));
 
     return res.status(200).json({
       success: true,
-      blockedDates: overlappingBookings.map((b) => ({
-        checkIn: b.checkIn,
-        checkOut: b.checkOut,
-      })),
-    })
+      blockedDates
+    });
   } catch (error) {
+    console.error("[BOOKING] Error checking availability:", error);
     return res.status(500).json({
       success: false,
-      message: error.message,
-    })
+      message: "Error checking availability",
+      error: error.message
+    });
   }
-}
+};
 
 export const getAllBookings = async (req, res) => {
   try {

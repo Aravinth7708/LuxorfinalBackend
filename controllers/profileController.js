@@ -8,6 +8,7 @@ export const checkaddressinbooking = async (req, res) => {
   if (!gmail) {
     return res.status(400).json({ error: "Email required" })
   }
+  
 
   try {
     const address = await Booking.findOne({ email: `${gmail}` })

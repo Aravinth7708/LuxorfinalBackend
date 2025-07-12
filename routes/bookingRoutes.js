@@ -35,7 +35,7 @@ router.post("/:id/cancel", authMiddleware, (req, res, next) => {
 })
 
 // Check availability
-router.get("/check-availability", bookingController.checkAvailability)
+router.get('/check-availability', authMiddleware, bookingController.checkAvailability);
 
 // Get blocked dates for a specific villa
 router.get("/blocked-dates/:villaId", bookingController.getBlockedDates)
