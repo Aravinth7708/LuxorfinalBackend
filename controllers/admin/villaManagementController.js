@@ -1,29 +1,22 @@
 import Villa from '../../models/Villa.js';
+import VillaImage from '../../models/VillaImage.js';
 import mongoose from 'mongoose';
 
 // Create a new villa
 export const createVilla = async (req, res) => {
   try {
-    console.log("[VILLA MGMT] Creating new villa");
+    console.log("[VILLA MGMT] Creating new villa with data:", req.body);
     
     const {
       name,
       location,
       price,
-      weekdayPrice,
-      weekendPrice,
       description,
-      longDescription,
-      guests,
       maxGuests,
       bedrooms,
       bathrooms,
-      facilities,
-      images,
-      events,
-      eventPricing,
-      securityDeposit,
-      nearbyAttractions
+      amenities,
+      mainImage // Base64 image data
     } = req.body;
     
     // Validate required fields
@@ -34,39 +27,42 @@ export const createVilla = async (req, res) => {
       });
     }
     
-    // Process base64 images if provided
-    let processedImages = [];
-    if (Array.isArray(images) && images.length > 0) {
-      // Filter out non-base64 strings and limit to 10 images
-      processedImages = images
-        .filter(img => typeof img === 'string' && img.startsWith('data:image'))
-        .slice(0, 10); // Limit to 10 images
-    }
+    // Process amenities
+    const processedAmenities = amenities ? 
+      amenities.map(name => ({ name, image: name.toLowerCase().replace(/\s+/g, '') })) : 
+      [];
     
     // Create new villa
     const villa = new Villa({
       name,
       location,
-      price,
-      weekdayPrice: weekdayPrice || price,
-      weekendPrice: weekendPrice || Math.round(price * 1.5),
-      description,
-      longDescription,
-      guests: guests || maxGuests,
-      maxGuests: maxGuests || guests,
-      bedrooms: bedrooms || 1,
-      bathrooms: bathrooms || 1,
-      facilities: facilities || [],
-      images: processedImages,
-      events: events || false,
-      eventPricing,
-      securityDeposit: securityDeposit || 0,
-      nearbyAttractions: nearbyAttractions || []
+      price: Number(price),
+      description: description || '',
+      guests: Number(maxGuests) || 2,
+      maxGuests: Number(maxGuests) || 2,
+      bedrooms: Number(bedrooms) || 1,
+      bathrooms: Number(bathrooms) || 1,
+      facilities: processedAmenities,
+      images: []
     });
     
     await villa.save();
-    
     console.log(`[VILLA MGMT] Successfully created villa: ${villa.name}`);
+    
+    // Store the main image in VillaImage collection if provided
+    if (mainImage && mainImage.startsWith('data:image')) {
+      try {
+        const villaImage = new VillaImage({
+          villaName: name,
+          imageBase64: mainImage
+        });
+        
+        await villaImage.save();
+        console.log(`[VILLA MGMT] Successfully stored main image for villa: ${villa.name}`);
+      } catch (imageError) {
+        console.error(`[VILLA MGMT] Error storing villa image: ${imageError}`);
+      }
+    }
     
     res.status(201).json({
       success: true,
@@ -75,7 +71,11 @@ export const createVilla = async (req, res) => {
         name: villa.name,
         location: villa.location,
         price: villa.price,
-        images: villa.images.length > 0 ? [villa.images[0]] : []
+        description: villa.description,
+        maxGuests: villa.maxGuests,
+        bedrooms: villa.bedrooms,
+        bathrooms: villa.bathrooms,
+        amenities: villa.facilities.map(f => f.name)
       }
     });
   } catch (err) {
@@ -181,14 +181,18 @@ export const deleteVilla = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Check if ID is a valid MongoDB ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid villa ID'
+        message: 'Invalid villa ID format'
       });
     }
     
-    const villa = await Villa.findByIdAndDelete(id);
+    console.log(`[VILLA MGMT] Attempting to delete villa with ID: ${id}`);
+    
+    // Find the villa first to get its name
+    const villa = await Villa.findById(id);
     
     if (!villa) {
       return res.status(404).json({
@@ -197,12 +201,31 @@ export const deleteVilla = async (req, res) => {
       });
     }
     
-    res.json({
+    // Store villa name for VillaImage deletion
+    const villaName = villa.name;
+    
+    // Delete the villa
+    await Villa.findByIdAndDelete(id);
+    console.log(`[VILLA MGMT] Successfully deleted villa: ${villaName}`);
+    
+    // Also delete associated image if it exists
+    try {
+      await VillaImage.findOneAndDelete({ villaName });
+      console.log(`[VILLA MGMT] Also deleted associated image for villa: ${villaName}`);
+    } catch (imageError) {
+      console.error(`[VILLA MGMT] Error deleting villa image: ${imageError}`);
+      // Continue with success response even if image deletion fails
+    }
+    
+    res.status(200).json({
       success: true,
       message: 'Villa deleted successfully'
     });
   } catch (err) {
-    console.error('[VILLA MGMT] Error deleting villa:', err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error(`[VILLA MGMT] Error deleting villa: ${err.message}`);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };

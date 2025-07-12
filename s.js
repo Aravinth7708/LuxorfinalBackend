@@ -1,5 +1,12 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get current file directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -19,15 +26,31 @@ mongoose.connect(MONGO_URI, {
 }).then(() => console.log("MongoDB connected to:", MONGO_URI.split('@')[1]))
   .catch(err => console.error("MongoDB connection error:", err));
 
-// Define Schema
+// Define Schemas
 const villaAmenitySchema = new mongoose.Schema({
   name: String,
   location: String,
   amenities: [String]
 });
 
-// Check if model exists before creating
+const villaImageSchema = new mongoose.Schema({
+  villaName: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
+  imageBase64: {
+    type: String,
+    required: true
+  }
+}, {
+  collection: 'VillaImages'
+});
+
+// Check if models exist before creating
 const VillaAmenity = mongoose.models.VillaAmenity || mongoose.model('VillaAmenity', villaAmenitySchema);
+const VillaImage = mongoose.models.VillaImage || mongoose.model('VillaImage', villaImageSchema);
 
 // Standard amenities list
 const standardAmenities = [
@@ -41,6 +64,49 @@ const standardAmenities = [
 function pickRandomAmenities() {
   const shuffled = [...standardAmenities].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, 12);
+}
+
+// Villa image mapping
+const villaImageMapping = {
+  "Amrith Palace": "anandvilla1.jpg",
+  "East Coast Villa": "EC1.jpg",
+  "Ram Water Villa": "RW1.jpg",
+  "Lavish Villa I": "lvone20.jpg",
+  "Lavish Villa II": "lvtwo20.jpg",
+  "Lavish Villa III": "lvthree5.jpg",
+  "Empire Anand Villa Samudra": "anandvilla1.jpg"
+};
+
+// Function to read image file and convert to base64
+function imageToBase64(imagePath) {
+  try {
+    // Check if file exists
+    if (!fs.existsSync(imagePath)) {
+      console.error(`Image file not found: ${imagePath}`);
+      return null;
+    }
+    
+    // Read file and convert to base64
+    const imageBuffer = fs.readFileSync(imagePath);
+    const imageBase64 = imageBuffer.toString('base64');
+    
+    // Get MIME type based on file extension
+    const extension = path.extname(imagePath).toLowerCase();
+    let mimeType = 'image/jpeg'; // default
+    
+    if (extension === '.png') {
+      mimeType = 'image/png';
+    } else if (extension === '.gif') {
+      mimeType = 'image/gif';
+    } else if (extension === '.webp') {
+      mimeType = 'image/webp';
+    }
+    
+    return `data:${mimeType};base64,${imageBase64}`;
+  } catch (error) {
+    console.error(`Error converting image to base64: ${error.message}`);
+    return null;
+  }
 }
 
 // Villas to insert (with corrected names)
@@ -60,7 +126,7 @@ const villas = [
 // Function to seed data
 async function seedData() {
   try {
-    // Check if there's existing data
+    // Check if there's existing villa amenities data
     const existingCount = await VillaAmenity.countDocuments();
     console.log(`Found ${existingCount} existing villa amenities records`);
     
@@ -75,11 +141,51 @@ async function seedData() {
       console.log("Adding new villa amenity data...");
     }
     
-    // Insert data
-    const result = await VillaAmenity.insertMany(villas);
-    console.log(`${result.length} villa amenities inserted successfully!`);
+    // Insert villa amenities data
+    const amenitiesResult = await VillaAmenity.insertMany(villas);
+    console.log(`${amenitiesResult.length} villa amenities inserted successfully!`);
+    
+    // Check if there's existing villa images data
+    const existingImagesCount = await VillaImage.countDocuments();
+    console.log(`Found ${existingImagesCount} existing villa images records`);
+    
+    // Prepare villa image data
+    const villaImagesData = [];
+    
+    for (const villa of villas) {
+      const imageName = villaImageMapping[villa.name];
+      if (!imageName) {
+        console.warn(`No image mapping found for villa: ${villa.name}`);
+        continue;
+      }
+      
+      const imagePath = path.join(__dirname, 'img', imageName);
+      const imageBase64 = imageToBase64(imagePath);
+      
+      if (imageBase64) {
+        villaImagesData.push({
+          villaName: villa.name,
+          imageBase64: imageBase64
+        });
+      }
+    }
+    
+    if (villaImagesData.length > 0) {
+      // Before inserting, delete existing records if they exist
+      if (existingImagesCount > 0) {
+        await VillaImage.deleteMany({});
+        console.log("Deleted existing villa images data");
+      }
+      
+      // Insert villa images data
+      const imagesResult = await VillaImage.insertMany(villaImagesData);
+      console.log(`${imagesResult.length} villa images inserted successfully!`);
+    } else {
+      console.log("No villa image data to insert");
+    }
+    
   } catch (err) {
-    console.error("Error seeding villa amenities:", err);
+    console.error("Error seeding data:", err);
   } finally {
     // Close DB connection
     mongoose.connection.close();

@@ -1,22 +1,22 @@
 import express from 'express';
-import * as villaManagementController from '../controllers/villaManagementController.js';
-import { authMiddleware, adminMiddleware } from '../../middleware/authMiddleware.js';
+import * as villaManagementController from '../../controllers/admin/villaManagementController.js';
+import { authMiddleware, admin } from '../../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Create a new villa (admin only)
-router.post('/', authMiddleware, adminMiddleware, villaManagementController.createVilla);
+// Create villa endpoint
+router.post('/', villaManagementController.createVilla);
 
-// Get all villas (admin view)
-router.get('/', authMiddleware, adminMiddleware, villaManagementController.getAllVillas);
+// Get all villas endpoint
+router.get('/', villaManagementController.getAllVillas);
 
-// Get villa by ID
-router.get('/:id', authMiddleware, adminMiddleware, villaManagementController.getVillaById);
+// Get villa by ID endpoint
+router.get('/:id', villaManagementController.getVillaById);
 
-// Update villa (admin only)
-router.put('/:id', authMiddleware, adminMiddleware, villaManagementController.updateVilla);
+// Update villa endpoint
+router.put('/:id', villaManagementController.updateVilla);
 
-// Delete villa (admin only)
-router.delete('/:id', authMiddleware, adminMiddleware, villaManagementController.deleteVilla);
+// DELETE villa endpoint - Make sure this is added
+router.delete('/:id', villaManagementController.deleteVilla);
 
 export default router;

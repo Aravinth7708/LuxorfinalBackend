@@ -27,6 +27,8 @@ import amenitiesRoutes from './routes/admin/amenitiesRoutes.js'; // Add this imp
 import userProfileRoutes from './routes/admin/userProfileRoutes.js';
 import adminNewsletterRoutes from './routes/admin/newsletterRoutes.js';
 import manualBookingRoutes from './routes/admin/manualBookingRoutes.js'; // Add this import with your other imports
+import villaImageRoutes from './routes/admin/villaImageRoutes.js'; // Add this import with your other imports
+import villaManagementRoutes from './routes/admin/villaManagementRoutes.js'; // Add this import with your other imports
 
 connectDB()
   .then(() => console.log('Database connection established'))
@@ -133,6 +135,8 @@ app.use('/api/admin/amenities', amenitiesRoutes); // Add this line with your oth
 app.use('/api/admin/newsletter', adminNewsletterRoutes);
 app.use('/api/admin/user-profiles', userProfileRoutes);
 app.use('/api/admin/manual-bookings', manualBookingRoutes); // Add this line with your other route registrations
+app.use('/api/admin/villa-images', villaImageRoutes); // Add this line with your other route registrations
+app.use('/api/villas', villaManagementRoutes); // Add this line with your other route registrations
 
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
