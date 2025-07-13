@@ -579,6 +579,9 @@ export const verifyPhoneAuth = async (req, res) => {
         role: user.role,
         isVerified: true,
         isPhoneVerified: true,
+        isEmailVerified: user.isEmailVerified || false,
+        emailVerified: user.isEmailVerified || false,
+        needsProfileUpdate: !user.isEmailVerified || user.email.includes('@phone.luxor.com'),
         userType: 'phone'
       }
     });
@@ -1085,7 +1088,10 @@ export const phoneVerifyWithEmail = async (req, res) => {
         role: user.role,
         isVerified: true,
         isPhoneVerified: true,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
+        emailVerified: user.isEmailVerified,
+        needsProfileUpdate: !user.isEmailVerified || user.email.includes('@phone.luxor.com'),
+        userType: 'phone'
       }
     });
     
