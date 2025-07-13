@@ -32,6 +32,7 @@ import contactRoutes from './routes/contactRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
 import adminPhoneUserRoutes from './routes/admin/adminPhoneUserRoutes.js';
 import cancelRequestRoutes from './routes/admin/cancelRequestRoutes.js'; // Add this import with your other imports
 import amenitiesRoutes from './routes/admin/amenitiesRoutes.js'; // Add this import with your other imports
@@ -144,6 +145,7 @@ app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api', profileRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api', webhookRoutes); // Webhook routes (no auth middleware)
 app.use('/api/complete/profile', phoneProfileRoutes); // No auth middleware
 app.use('/api/admin', adminPhoneUserRoutes); // Admin-only routes for phone user management
 app.use('/api/cancel-requests', cancelRequestRoutes); // Add this line with your other route registrations

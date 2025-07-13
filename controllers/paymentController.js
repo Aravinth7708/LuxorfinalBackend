@@ -281,7 +281,20 @@ export const verifyPayment = async (req, res) => {
       checkInTime: bookingData.checkInTime || "14:00", // Default to 2:00 PM
       checkOutTime: bookingData.checkOutTime || "12:00", // Default to 12:00 PM
       createdAt: new Date(),
-      isTestBooking: true // Flag to indicate this is a test booking
+      isTestBooking: true, // Flag to indicate this is a test booking
+      // Store payment details for webhook compatibility
+      paymentDetails: {
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        paymentCapturedAt: new Date(),
+        paymentMethod: paymentMethod,
+        bank: paymentDetails?.bank || null,
+        cardId: paymentDetails?.card?.id || null,
+        wallet: paymentDetails?.wallet || null,
+        vpa: paymentDetails?.acquirer_data?.upi?.vpa || null,
+        orderAmount: paymentDetails?.amount || 1000, // Amount in paise
+        orderCurrency: paymentDetails?.currency || 'INR'
+      }
     };
 
     // Create booking with test flag
@@ -1169,70 +1182,8 @@ export const refundPayment = async (req, res) => {
   }
 };
 
-// Add this to your paymentController.js
-
-export const handleWebhook = async (req, res) => {
-  try {
-    const signature = req.headers['x-razorpay-signature'];
-    // Your webhook secret from Razorpay dashboard
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    
-    // Verify webhook signature
-    const verified = razorpay.webhooks.verify(
-      JSON.stringify(req.body),
-      signature,
-      webhookSecret
-    );
-    
-    if (!verified) {
-      return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
-    }
-    
-    const { payload } = req.body;
-    const event = req.body.event;
-    
-    console.log('[WEBHOOK] Received event:', event);
-    
-    // Handle different event types
-    if (event === 'payment.authorized') {
-      const paymentId = payload.payment.entity.id;
-      const orderId = payload.payment.entity.order_id;
-      
-      // Create booking based on payment information
-      // You'll need to get booking details from the notes field
-      const paymentDetails = await razorpay.payments.fetch(paymentId);
-      const notes = paymentDetails.notes || {};
-      
-      // Create booking in your database
-      const booking = new Booking({
-        villaId: notes.villaId,
-        userId: notes.userId,
-        villaName: notes.villaName,
-        checkIn: new Date(notes.checkIn),
-        checkOut: new Date(notes.checkOut),
-        checkInTime: notes.checkInTime || "14:00", // Default to 2:00 PM
-        checkOutTime: notes.checkOutTime || "12:00", // Default to 12:00 PM
-        guests: parseInt(notes.guests),
-        paymentId: paymentId,
-        orderId: orderId,
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        totalAmount: paymentDetails.amount / 100 // Convert from paise to rupees
-      });
-      
-      await booking.save();
-      console.log('[WEBHOOK] Booking created from webhook:', booking._id);
-    }
-    
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('[WEBHOOK] Error processing webhook:', error);
-    res.status(500).json({ success: false, error: 'Webhook processing failed' });
-  }
-};
-
-// Add the webhook route in paymentRoutes.js
-router.post('/webhook', handleWebhook);
+// Note: Webhook handling has been moved to dedicated webhookRoutes.js
+// This provides better separation of concerns and more comprehensive webhook handling
 
 // Helper function to format time from 24-hour to 12-hour format
 const formatTimeFor12Hour = (time24) => {
