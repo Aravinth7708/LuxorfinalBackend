@@ -272,16 +272,30 @@ export const checkPhoneExists = async (req, res) => {
       });
     }
     
+    console.log(`[PHONE CHECK] Checking if phone number exists: ${phoneNumber}`);
+    
     // Check in PhoneUser collection
     const phoneUser = await PhoneUser.findOne({ phoneNumber });
     
     // Also check if another regular user has this phone number
-    const regularUser = await User.findOne({ phone: phoneNumber });
+    // Look in both phone and phoneNumber fields for maximum compatibility
+    const regularUser = await User.findOne({ 
+      $or: [
+        { phone: phoneNumber },
+        { phoneNumber: phoneNumber }
+      ] 
+    });
+    
+    const userProfile = await UserProfile.findOne({ phone: phoneNumber });
+    
+    const exists = !!phoneUser || !!regularUser || !!userProfile;
+    
+    console.log(`[PHONE CHECK] Phone ${phoneNumber} exists: ${exists}`);
     
     // Return whether the phone exists or not
     res.status(200).json({
       success: true,
-      exists: !!phoneUser || !!regularUser,
+      exists: exists,
       // Don't include user details for security reasons
     });
   } catch (error) {

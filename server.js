@@ -3,8 +3,18 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './utils/dbConnect.js';
+import https from 'https';
+import fs from 'fs';
+import { securityHeaders } from './middleware/securityMiddleware.js';
+import { basicLimiter, authLimiter } from './middleware/rateLimitMiddleware.js';
+import { csrfProtection, handleCSRFError } from './middleware/csrfMiddleware.js';
+import helmet from 'helmet';
+import { validateEnv } from './utils/validateEnv.js';
 
 dotenv.config();
+
+// Validate environment variables before starting server
+validateEnv();
 
 if (!process.env.JWT_SECRET) {
   console.error('ERROR: JWT_SECRET environment variable is not set!');
@@ -65,34 +75,29 @@ app.use((req, res, next) => {
   next();
 });
 
-// Enhanced CORS configuration with better error handling
-app.use(cors({
-  origin:
-    [
-      'http://localhost:5173', 
-      'http://localhost:5174',
-      'https://luxor-omega.vercel.app', 
-      'http://localhost:5176',
-      'https://www.luxorholidayhomestays.com',
-      'https://luxorholidayhomesstays.vercel.app',
-      
-      undefined  
-    ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
-  credentials: true,
-  exposedHeaders: ['Content-Range', 'X-Total-Count'],
-  maxAge: 86400, // Cache preflight response for 24 hours
-  optionsSuccessStatus: 204, // Use 204 for successful OPTIONS requests
+// Apply security middleware early in the chain
+app.use(helmet()); // Add this after installing helmet package
+app.use(securityHeaders);
 
+// Apply rate limiting
+app.use(basicLimiter);
+app.use('/api/auth', authLimiter);
+
+// Enable CORS with strict options
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://luxorholidayhomestays.com', 'https://www.luxorholidayhomestays.com']
+    : 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
+  credentials: true,
+  maxAge: 86400
 }));
 
-app.use(express.json({ limit: '2mb' })); // Increase JSON payload limit
-app.use(express.urlencoded({ extended: true })); // Support URL-encoded bodies
+app.use(express.json({ limit: '100kb' })); // Increase JSON payload limit
+app.use(express.urlencoded({ extended: true, limit: '100kb' })); // Support URL-encoded bodies
 
-// Add this middleware to serve uploaded images
+
 app.use('/uploads', express.static('uploads'));
 
 // Root health check endpoint with more robust error handling
@@ -114,8 +119,6 @@ app.get('/', (req, res) => {
     });
   }
 });
-
-
 
 // Then add this line with your other route registrations
 app.use('/api/profile', profileRoutes);
@@ -176,8 +179,36 @@ export default app;
 
 // Start the server only when this file is executed directly (not when imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const PORT =  5000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} (${process.env.NODE_ENV || 'unset'})`);
+  // Use HTTPS in production
+if (process.env.NODE_ENV === 'production') {
+  try {
+    const privateKey = fs.readFileSync('/path/to/privkey.pem', 'utf8');
+    const certificate = fs.readFileSync('/path/to/cert.pem', 'utf8');
+    const ca = fs.readFileSync('/path/to/chain.pem', 'utf8');
+
+    const credentials = {
+      key: privateKey,
+      cert: certificate,
+      ca: ca
+    };
+
+    const httpsServer = https.createServer(credentials, app);
+    
+    httpsServer.listen(process.env.HTTPS_PORT || 443, () => {
+      console.log(`HTTPS Server running on port ${process.env.HTTPS_PORT || 443}`);
+    });
+  } catch (error) {
+    console.error('Failed to start HTTPS server:', error);
+    // Fall back to HTTP if certificate files are not available
+    startHttpServer();
+  }
+} else {
+  startHttpServer();
+}
+
+function startHttpServer() {
+  app.listen(process.env.PORT || 5000, () => {
+    console.log(`HTTP Server running on port ${process.env.PORT || 5000}`);
   });
+}
 }
