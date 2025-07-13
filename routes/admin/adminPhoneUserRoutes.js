@@ -10,11 +10,11 @@ import {
 
 const router = express.Router();
 
-// Require both authentication and admin role for all routes in this router
+
 router.use(authMiddleware);
 router.use(admin);
 
-// Connect routes to controller functions
+
 router.get('/phone-users', getAllPhoneUsers);
 router.get('/phone-users/:id', getPhoneUserById);
 router.post('/phone-users', createPhoneUser);

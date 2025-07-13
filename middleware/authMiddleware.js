@@ -2,31 +2,30 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import PhoneUser from '../models/PhoneUser.js';
 
-// Add this function to verify Firebase/Google tokens
+
 const verifyGoogleToken = async (token) => {
   try {
-    // For Firebase tokens, we need to handle them differently
-    // Check if this is a Firebase/Google token by looking at the header
+
     const parts = token.split('.');
     if (parts.length !== 3) {
       throw new Error('Invalid token format');
     }
     
-    // Decode the header to check the algorithm
+ 
     const header = JSON.parse(Buffer.from(parts[0], 'base64').toString());
     
     if (header.alg === 'RS256') {
-      // This is likely a Google/Firebase token
+  
       console.log('[AUTH] Detected Google/Firebase token');
       
-      // For Google/Firebase tokens, we need to extract the email and find the user
+ 
       const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
       
       if (!payload.email) {
         throw new Error('No email found in token');
       }
       
-      // Find user by email
+   
       const user = await User.findOne({ email: payload.email });
       
       if (!user) {
@@ -45,7 +44,7 @@ const verifyGoogleToken = async (token) => {
       };
     }
     
-    // If not a Google token, let regular verification handle it
+
     return null;
   } catch (error) {
     console.error('[AUTH] Google token verification error:', error.message);
@@ -53,10 +52,9 @@ const verifyGoogleToken = async (token) => {
   }
 };
 
-// Update authMiddleware to log more detailed information and handle undefined userId
+
 export const authMiddleware = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -77,17 +75,17 @@ export const authMiddleware = async (req, res, next) => {
       });
     }
     
-    // Log token for debugging (truncated for security)
+ 
     const truncatedToken = token.length > 10 ? 
       `${token.substring(0, 10)}...` : 'invalid-token';
     console.log(`[AUTH] Validating token: ${truncatedToken}`);
     
     try {
-      // First try to verify as a Google token
+  
       const googleUser = await verifyGoogleToken(token);
       
       if (googleUser) {
-        // If Google token verification successful
+   
         if (!googleUser.userId) {
           console.log("[AUTH] Google verification successful but missing userId");
           return res.status(401).json({
@@ -101,10 +99,10 @@ export const authMiddleware = async (req, res, next) => {
         return next();
       }
       
-      // If not a Google token, verify as a regular JWT token
+   
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // Check if decoded token has userId or id
+    
       const userIdToUse = decoded.userId || decoded.id;
       
       if (!userIdToUse) {

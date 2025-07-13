@@ -1,6 +1,4 @@
-/**
- * Custom error handler middleware for Express
- */
+
 const errorHandler = (err, req, res, next) => {
   console.error('Error handling request:', {
     url: req.originalUrl,
@@ -9,11 +7,11 @@ const errorHandler = (err, req, res, next) => {
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
 
-  // Default error status and message
+
   let status = err.status || 500;
   let message = err.message || 'Internal Server Error';
   
-  // Handle specific error types
+
   if (err.name === 'ValidationError') {
     status = 400;
     message = 'Validation Error';
@@ -31,7 +29,7 @@ const errorHandler = (err, req, res, next) => {
     message = 'Duplicate key error';
   }
 
-  // Create standardized error response
+
   const errorResponse = {
     success: false,
     status,
@@ -40,7 +38,7 @@ const errorHandler = (err, req, res, next) => {
     path: req.originalUrl
   };
   
-  // Add details in development mode
+
   if (process.env.NODE_ENV !== 'production') {
     errorResponse.details = err.stack;
     if (err.errors) {

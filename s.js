@@ -123,7 +123,7 @@ const villas = [
   amenities: pickRandomAmenities()
 }));
 
-// Function to seed data
+
 async function seedData() {
   try {
     // Check if there's existing villa amenities data
@@ -171,13 +171,13 @@ async function seedData() {
     }
     
     if (villaImagesData.length > 0) {
-      // Before inserting, delete existing records if they exist
+   
       if (existingImagesCount > 0) {
         await VillaImage.deleteMany({});
         console.log("Deleted existing villa images data");
       }
       
-      // Insert villa images data
+     
       const imagesResult = await VillaImage.insertMany(villaImagesData);
       console.log(`${imagesResult.length} villa images inserted successfully!`);
     } else {
@@ -187,7 +187,7 @@ async function seedData() {
   } catch (err) {
     console.error("Error seeding data:", err);
   } finally {
-    // Close DB connection
+ 
     mongoose.connection.close();
     console.log("MongoDB connection closed");
   }

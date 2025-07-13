@@ -12,7 +12,7 @@ export const validateEnv = () => {
     process.exit(1);
   }
   
-  // Validate JWT_SECRET strength
+
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
     console.warn('WARNING: JWT_SECRET should be at least 32 characters long for security');
   }

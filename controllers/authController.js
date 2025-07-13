@@ -36,7 +36,7 @@ export const register = async (req, res) => {
       if (existingUser.isVerified) {
         return res.status(400).json({ error: 'User already exists with this email' });
       } else {
-        // User exists but not verified - send new OTP
+      
         const otp = generateOTP();
         
         // Delete any existing OTPs for this email
@@ -411,6 +411,18 @@ export const verifyPhoneAuth = async (req, res) => {
       } catch (firebaseError) {
         console.error('[PHONE_AUTH] Firebase Admin verification failed:', firebaseError.message);
         
+        // Check for session expired or token invalid errors
+        if (firebaseError.message.includes('session-expired') ||
+            firebaseError.message.includes('auth/session-expired') ||
+            firebaseError.message.includes('expired')) {
+          console.log('[PHONE_AUTH] Session expired error detected');
+          return res.status(401).json({ 
+            error: 'Your verification session has expired',
+            code: 'SESSION_EXPIRED',
+            details: 'Please request a new verification code.'
+          });
+        }
+        
         // Fall back to basic validation for development
         console.log('[PHONE_AUTH] Using development fallback mode');
         verificationMode = 'development';
@@ -441,6 +453,18 @@ export const verifyPhoneAuth = async (req, res) => {
         console.log('[PHONE_AUTH] Development mode verification successful');
       } catch (devError) {
         console.error('[PHONE_AUTH] Development mode validation failed:', devError);
+        
+        // Check if this might be a session expiration error
+        if (idToken.includes('SESSION_EXPIRED') || 
+            (typeof idToken === 'string' && idToken.length > 20 && idToken.length < 100)) {
+          // This is likely an expired or malformed token
+          return res.status(401).json({
+            error: 'Your verification session has expired',
+            code: 'SESSION_EXPIRED',
+            details: 'Please request a new verification code.'
+          });
+        }
+        
         return res.status(400).json({ error: 'Invalid token format' });
       }
     }

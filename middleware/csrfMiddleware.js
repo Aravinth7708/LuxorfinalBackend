@@ -1,6 +1,5 @@
 import csrf from 'csurf';
 
-// CSRF protection middleware
 export const csrfProtection = csrf({
   cookie: {
     httpOnly: true,
@@ -9,7 +8,7 @@ export const csrfProtection = csrf({
   }
 });
 
-// Error handler for CSRF errors
+
 export const handleCSRFError = (err, req, res, next) => {
   if (err.code === 'EBADCSRFTOKEN') {
     return res.status(403).json({
