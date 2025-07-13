@@ -10,6 +10,7 @@ import { basicLimiter, authLimiter } from './middleware/rateLimitMiddleware.js';
 import { csrfProtection, handleCSRFError } from './middleware/csrfMiddleware.js';
 import helmet from 'helmet';
 import { validateEnv } from './utils/validateEnv.js';
+import bodyParser from 'body-parser';
 
 dotenv.config();
 
@@ -94,9 +95,21 @@ app.use(cors({
   maxAge: 86400
 }));
 
-app.use(express.json({ limit: '100kb' })); // Increase JSON payload limit
-app.use(express.urlencoded({ extended: true, limit: '100kb' })); // Support URL-encoded bodies
+app.use(express.json({ limit: '1mb' })); // Default limit for most routes
+app.use(express.urlencoded({ extended: true, limit: '1mb' })); // Support URL-encoded bodies
 
+// Special body parser with larger limit for the villa-images route
+// This applies the larger limit ONLY to the villa-images route to avoid security issues
+app.use('/api/admin/villa-images', bodyParser.json({ 
+  limit: '10mb', // Larger limit for villa images
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf);
+    } catch (e) {
+      res.status(400).send('Invalid JSON');
+    }
+  }
+}));
 
 app.use('/uploads', express.static('uploads'));
 

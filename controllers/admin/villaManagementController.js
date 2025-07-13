@@ -2,7 +2,7 @@ import Villa from '../../models/Villa.js';
 import VillaImage from '../../models/VillaImage.js';
 import mongoose from 'mongoose';
 
-// Create a new villa
+// Create a new villa - updated to match your model
 export const createVilla = async (req, res) => {
   try {
     console.log("[VILLA MGMT] Creating new villa with data:", req.body);
@@ -14,9 +14,7 @@ export const createVilla = async (req, res) => {
       description,
       maxGuests,
       bedrooms,
-      bathrooms,
-      amenities,
-      mainImage // Base64 image data
+      bathrooms
     } = req.body;
     
     // Validate required fields
@@ -27,42 +25,23 @@ export const createVilla = async (req, res) => {
       });
     }
     
-    // Process amenities
-    const processedAmenities = amenities ? 
-      amenities.map(name => ({ name, image: name.toLowerCase().replace(/\s+/g, '') })) : 
-      [];
-    
-    // Create new villa
+    // Create new villa - match your model structure
     const villa = new Villa({
       name,
       location,
       price: Number(price),
       description: description || '',
-      guests: Number(maxGuests) || 2,
-      maxGuests: Number(maxGuests) || 2,
+      guests: Number(maxGuests) || 2, // For backward compatibility
+      maxGuests: Number(maxGuests) || 2, 
       bedrooms: Number(bedrooms) || 1,
       bathrooms: Number(bathrooms) || 1,
-      facilities: processedAmenities,
-      images: []
+      rating: 4.5 // Default value
     });
     
     await villa.save();
     console.log(`[VILLA MGMT] Successfully created villa: ${villa.name}`);
     
-    // Store the main image in VillaImage collection if provided
-    if (mainImage && mainImage.startsWith('data:image')) {
-      try {
-        const villaImage = new VillaImage({
-          villaName: name,
-          imageBase64: mainImage
-        });
-        
-        await villaImage.save();
-        console.log(`[VILLA MGMT] Successfully stored main image for villa: ${villa.name}`);
-      } catch (imageError) {
-        console.error(`[VILLA MGMT] Error storing villa image: ${imageError}`);
-      }
-    }
+    // Handle the main image upload separately
     
     res.status(201).json({
       success: true,
@@ -74,8 +53,7 @@ export const createVilla = async (req, res) => {
         description: villa.description,
         maxGuests: villa.maxGuests,
         bedrooms: villa.bedrooms,
-        bathrooms: villa.bathrooms,
-        amenities: villa.facilities.map(f => f.name)
+        bathrooms: villa.bathrooms
       }
     });
   } catch (err) {
@@ -131,7 +109,7 @@ export const getVillaById = async (req, res) => {
   }
 };
 
-// Update villa
+// Update villa - updated to match your model
 export const updateVilla = async (req, res) => {
   try {
     const { id } = req.params;
@@ -143,19 +121,30 @@ export const updateVilla = async (req, res) => {
       });
     }
     
-    const updateData = { ...req.body };
+    const updateData = req.body;
     
-    // Process base64 images if provided
-    if (Array.isArray(updateData.images) && updateData.images.length > 0) {
-      // Filter out non-base64 strings and limit to 10 images
-      updateData.images = updateData.images
-        .filter(img => typeof img === 'string')
-        .slice(0, 10); // Limit to 10 images
+    // Remove any fields that aren't in your model
+    const validFields = [
+      'name', 'location', 'price', 'description', 
+      'maxGuests', 'bedrooms', 'bathrooms'
+    ];
+    
+    const cleanedData = {};
+    Object.keys(updateData).forEach(key => {
+      if (validFields.includes(key)) {
+        cleanedData[key] = updateData[key];
+      }
+    });
+    
+    // Also update the 'guests' field if 'maxGuests' is provided (for backward compatibility)
+    if (cleanedData.maxGuests) {
+      cleanedData.guests = cleanedData.maxGuests;
     }
     
+    // Update villa document
     const villa = await Villa.findByIdAndUpdate(
       id,
-      updateData,
+      cleanedData,
       { new: true, runValidators: true }
     );
     
