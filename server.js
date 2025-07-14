@@ -91,7 +91,11 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com"
+        ],
         imgSrc: ["'self'", "data:", "https:", "http:"],
         connectSrc: [
           "'self'",
