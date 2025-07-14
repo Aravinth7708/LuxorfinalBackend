@@ -1,6 +1,7 @@
 import express from 'express';
 import * as userController from '../controllers/userController.js';
-// import { protect, admin } from '../middleware/authMiddleware.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+import { sendEmailOtp, verifyEmailOtp } from '../controllers/userProfileController.js';
 
 const router = express.Router();
 
@@ -18,5 +19,9 @@ router.get('/:id',  userController.getUserById);
 router.put('/:id',  userController.updateUser);
 router.put('/:id/role',  userController.updateUserRole);
 router.delete('/:id',  userController.deleteUser);
+
+// New routes for email OTP
+router.post('/send-email-otp', authMiddleware, sendEmailOtp);
+router.post('/verify-email-otp', authMiddleware, verifyEmailOtp);
 
 export default router;

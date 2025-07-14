@@ -5,12 +5,19 @@ import cors from 'cors';
 import connectDB from './utils/dbConnect.js';
 import https from 'https';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { securityHeaders } from './middleware/securityMiddleware.js';
 import { basicLimiter, authLimiter } from './middleware/rateLimitMiddleware.js';
 import { csrfProtection, handleCSRFError } from './middleware/csrfMiddleware.js';
 import helmet from 'helmet';
 import { validateEnv } from './utils/validateEnv.js';
 import bodyParser from 'body-parser';
+import { rateLimit } from 'express-rate-limit';
+
+// ES module fix for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -77,64 +84,83 @@ app.use((req, res, next) => {
   next();
 });
 
-// Apply security middleware early in the chain
-app.use(helmet()); // Add this after installing helmet package
+// Security middleware
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:", "http:"],
+        connectSrc: [
+          "'self'",
+          process.env.RAZORPAY_API_URL || "https://api.razorpay.com"
+        ],
+        frameSrc: ["'self'", "https://checkout.razorpay.com"],
+        formAction: ["'self'", "https://checkout.razorpay.com"]
+      }
+    },
+    // Enables other headers like X-Frame-Options, X-Content-Type-Options, etc.
+    frameguard: { action: "sameorigin" },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    permissionsPolicy: {
+      features: {
+        geolocation: ["'none'"],
+        microphone: ["'none'"]
+      }
+    }
+  })
+);
+
 app.use(securityHeaders);
 
-// Apply rate limiting
-app.use(basicLimiter);
-app.use('/api/auth', authLimiter);
-
-// Enable CORS with strict options
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://luxorholidayhomestays.com', 'https://www.luxorholidayhomestays.com']
-    : 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
+// CORS configuration
+const corsOptions = {
+  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : 'http://localhost:5173',
   credentials: true,
-  maxAge: 86400
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-razorpay-signature']
+};
 
-app.use(express.json({ limit: '1mb' })); // Default limit for most routes
-app.use(express.urlencoded({ extended: true, limit: '1mb' })); // Support URL-encoded bodies
+app.use(cors(corsOptions));
 
-// Special body parser with larger limit for the villa-images route
-// This applies the larger limit ONLY to the villa-images route to avoid security issues
-app.use('/api/admin/villa-images', bodyParser.json({ 
-  limit: '10mb', // Larger limit for villa images
-  verify: (req, res, buf) => {
-    try {
-      JSON.parse(buf);
-    } catch (e) {
-      res.status(400).send('Invalid JSON');
-    }
-  }
-}));
-
-app.use('/uploads', express.static('uploads'));
-
-// Root health check endpoint with more robust error handling
-app.get('/', (req, res) => {
-  try {
-    res.json({
-      status: 'ok',
-      message: 'LuxorStay API is running',
-      version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error in root endpoint:', error);
-    res.status(500).json({ 
-      status: 'error',
-      message: 'Server encountered an error processing the request',
-      error: process.env.NODE_ENV === 'production' ? undefined : error.message
-    });
-  }
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
+  message: 'Too many requests from this IP, please try again after 15 minutes'
 });
 
-// Then add this line with your other route registrations
+app.use(apiLimiter);
+app.use('/api/auth', authLimiter);
+
+// Body parser middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Special handling for webhook - raw body is needed for signature verification
+app.use('/api/payments/webhook', bodyParser.raw({ type: 'application/json' }));
+
+// CSRF protection (exclude API routes and webhooks)
+// app.use((req, res, next) => {
+//   if (req.path.startsWith('/api/') || req.path.startsWith('/webhook')) {
+//     return next();
+//   }
+//   return csrfProtection(req, res, next);
+// });
+
+app.use(handleCSRFError);
+
+// Logging middleware for development
+if (process.env.NODE_ENV === 'development') {
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
+    next();
+  });
+}
+
+// API Routes
 app.use('/api/profile', profileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/villas', villaRoutes);
@@ -143,18 +169,23 @@ app.use('/api/auth', authRoutes);
 app.use('/api/photo-gallery', photoGalleryRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
-app.use('/api', profileRoutes);
+app.use('/api/complete/profile', phoneProfileRoutes);
+
+// Payment routes - mount before catch-all routes
 app.use('/api/payments', paymentRoutes);
-app.use('/api', webhookRoutes); // Webhook routes (no auth middleware)
-app.use('/api/complete/profile', phoneProfileRoutes); // No auth middleware
-app.use('/api/admin', adminPhoneUserRoutes); // Admin-only routes for phone user management
-app.use('/api/cancel-requests', cancelRequestRoutes); // Add this line with your other route registrations
-app.use('/api/admin/amenities', amenitiesRoutes); // Add this line with your other route registrations
+
+// Webhook routes - mount before catch-all routes
+app.use('/api/webhook', webhookRoutes);
+
+// Admin routes
+app.use('/api/admin', adminPhoneUserRoutes);
+app.use('/api/cancel-requests', cancelRequestRoutes);
+app.use('/api/admin/amenities', amenitiesRoutes);
 app.use('/api/admin/newsletter', adminNewsletterRoutes);
 app.use('/api/admin/user-profiles', userProfileRoutes);
-app.use('/api/admin/manual-bookings', manualBookingRoutes); // Add this line with your other route registrations
-app.use('/api/admin/villa-images', villaImageRoutes); // Add this line with your other route registrations
-app.use('/api/villas', villaManagementRoutes); // Add this line with your other route registrations
+app.use('/api/admin/manual-bookings', manualBookingRoutes);
+app.use('/api/admin/villa-images', villaImageRoutes);
+app.use('/api/villas', villaManagementRoutes);
 
 app.get('/api/rooms/:id', (req, res) => {
   const villaId = req.params.id;
@@ -164,8 +195,41 @@ app.get('/api/rooms/:id', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Server error', error: err.message });
+  console.error('Error:', err.stack);
+  
+  // Handle specific error types
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      error: 'Validation Error',
+      details: err.message
+    });
+  }
+
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication failed',
+      message: 'Please log in again'
+    });
+  }
+
+  // Handle Razorpay errors
+  if (err.error && err.error.error) {
+    return res.status(400).json({
+      success: false,
+      error: 'Payment Error',
+      message: err.error.error.description || 'Payment processing failed'
+    });
+  }
+
+  // Default error response
+  res.status(err.status || 500).json({
+    success: false,
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 });
 
 // Global error handler - improved for serverless environments

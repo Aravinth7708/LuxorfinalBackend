@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { createRequire } from 'module';
+import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import Villa from '../models/Villa.js';
 import nodemailer from 'nodemailer';
@@ -12,14 +13,14 @@ import { dirname } from 'path';
 const require = createRequire(import.meta.url);
 const Razorpay = require('razorpay');
 
-
+// Update the Razorpay initialization to use the correct environment variable names
 const razorpay = new Razorpay({
-  key_id: process.env.RazorpayKey, 
-  key_secret: process.env.RAZORPAY_SECRET 
+  key_id: process.env.RAZORpAY_KEY_ID,     // Match the case from .env
+  key_secret: process.env.RAZORPAY_SECRET  // Make sure this matches .env
 });
 
 // Add console logs to verify keys are loaded
-console.log("Razorpay initialized with key:", process.env.RazorpayKey?.substring(0, 5) + "...");
+console.log("Razorpay initialized with key:", process.env.RAZORpAY_KEY_ID ? "[key exists]" : "[key missing]");
 
 const router = require('express').Router();
 export const createOrder = async (req, res) => {
@@ -149,190 +150,137 @@ export const createOrder = async (req, res) => {
 
 // Verify Razorpay payment and create booking
 export const verifyPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
-    console.log("[PAYMENT] Verifying payment:", {
-      payment_id: req.body.razorpay_payment_id,
-      order_id: req.body.razorpay_order_id
-    });
+    console.log("[PAYMENT] Verification request received:", req.body);
     
-    const {
+    const { 
+      razorpay_order_id, 
+      razorpay_payment_id, 
+      razorpay_signature,
+      bookingId 
+    } = req.body;
+    
+    if ((!razorpay_order_id && !bookingId) || !razorpay_payment_id || !razorpay_signature) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required payment verification data'
+      });
+    }
+
+    // Verify the payment signature
+    const generated_signature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_SECRET)
+      .update(`${razorpay_order_id || ''}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (generated_signature !== razorpay_signature) {
+      console.error("[PAYMENT] Invalid signature:", {
+        expected: generated_signature,
+        received: razorpay_signature
+      });
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid payment signature'
+      });
+    }
+
+    // Find the booking - try multiple ways
+    let booking = null;
+    let query = {};
+    
+    // First try with direct bookingId if provided
+    if (bookingId && mongoose.Types.ObjectId.isValid(bookingId)) {
+      query = { _id: bookingId };
+      booking = await Booking.findOne(query).session(session);
+    }
+    
+    // If not found, try with razorpay_order_id
+    if (!booking && razorpay_order_id) {
+      query = { 'payment.razorpay_order_id': razorpay_order_id };
+      booking = await Booking.findOne(query).session(session);
+    }
+    
+    // If still not found, try to find the order info from Razorpay
+    if (!booking && razorpay_order_id) {
+      try {
+        const orderInfo = await razorpay.orders.fetch(razorpay_order_id);
+        if (orderInfo && orderInfo.notes && orderInfo.notes.bookingId) {
+          query = { _id: orderInfo.notes.bookingId };
+          booking = await Booking.findOne(query).session(session);
+        }
+      } catch (err) {
+        console.error("[PAYMENT] Error fetching order info from Razorpay:", err);
+      }
+    }
+
+    // If still no booking found, this is an error
+    if (!booking) {
+      console.error("[PAYMENT] Booking not found for verification:", {
+        bookingId,
+        razorpay_order_id,
+        query
+      });
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        error: 'Booking not found'
+      });
+    }
+
+    // Update booking with payment info
+    booking.payment = {
+      ...booking.payment,
+      status: 'captured',
       razorpay_payment_id,
       razorpay_order_id,
       razorpay_signature,
-      bookingData
-    } = req.body;
-
-    // For test transactions, we'll still verify signature for security
-    const generatedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_SECRET)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest('hex');
-    
-    const isSignatureValid = generatedSignature === razorpay_signature;
-
-    if (!isSignatureValid) {
-      console.error("[PAYMENT] Invalid signature:", {
-        expected: generatedSignature,
-        received: razorpay_signature
-      });
-      
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid payment signature' 
-      });
-    }
-
-    // Fetch payment details from Razorpay to get the payment method
-    let paymentMethod = "Online Payment"; // Default fallback
-    let paymentDetails = null;
-    
-    try {
-      console.log("[PAYMENT] Fetching payment details from Razorpay for payment ID:", razorpay_payment_id);
-      paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
-      console.log("[PAYMENT] Payment details from Razorpay:", JSON.stringify(paymentDetails, null, 2));
-      
-      // Extract payment method from Razorpay response
-      if (paymentDetails && paymentDetails.method) {
-        console.log("[PAYMENT] Raw payment method from Razorpay:", paymentDetails.method);
-        
-        switch (paymentDetails.method) {
-          case 'upi':
-            paymentMethod = 'UPI';
-            break;
-          case 'card':
-            paymentMethod = 'Card';
-            break;
-          case 'netbanking':
-            paymentMethod = 'Net Banking';
-            break;
-          case 'wallet':
-            paymentMethod = 'Wallet';
-            break;
-          case 'bank_transfer':
-            paymentMethod = 'Bank Transfer';
-            break;
-          case 'emi':
-            paymentMethod = 'EMI';
-            break;
-          default:
-            paymentMethod = `Online Payment (${paymentDetails.method})`;
-        }
-        
-        // If it's UPI, try to get more specific info
-        if (paymentDetails.method === 'upi' && paymentDetails.acquirer_data && paymentDetails.acquirer_data.upi) {
-          const upiData = paymentDetails.acquirer_data.upi;
-          console.log("[PAYMENT] UPI data:", upiData);
-          if (upiData.vpa) {
-            const upiProvider = upiData.vpa.split('@')[1] || 'UPI';
-            paymentMethod = `UPI (${upiProvider})`;
-          }
-        }
-        
-        // If it's card, get card network
-        if (paymentDetails.method === 'card' && paymentDetails.card) {
-          console.log("[PAYMENT] Card data:", paymentDetails.card);
-          const cardNetwork = paymentDetails.card.network || '';
-          const cardType = paymentDetails.card.type || '';
-          if (cardNetwork && cardType) {
-            paymentMethod = `${cardNetwork} ${cardType} Card`.trim();
-          } else if (cardNetwork) {
-            paymentMethod = `${cardNetwork} Card`;
-          } else {
-            paymentMethod = 'Card';
-          }
-        }
-        
-        // If it's wallet, get wallet name
-        if (paymentDetails.method === 'wallet' && paymentDetails.wallet) {
-          console.log("[PAYMENT] Wallet data:", paymentDetails.wallet);
-          paymentMethod = `Wallet (${paymentDetails.wallet})`;
-        }
-        
-        // If it's netbanking, get bank name
-        if (paymentDetails.method === 'netbanking' && paymentDetails.bank) {
-          console.log("[PAYMENT] Bank data:", paymentDetails.bank);
-          paymentMethod = `Net Banking (${paymentDetails.bank})`;
-        }
-      }
-    } catch (paymentFetchError) {
-      console.error("[PAYMENT] Error fetching payment details from Razorpay:", paymentFetchError);
-      console.error("[PAYMENT] Error details:", {
-        message: paymentFetchError.message,
-        stack: paymentFetchError.stack
-      });
-      // Continue with default payment method
-      console.log("[PAYMENT] Continuing with default payment method:", paymentMethod);
-    }
-
-    console.log("[PAYMENT] Determined payment method:", paymentMethod);
-
-    // For test payments, we're using a fixed amount of 10 rupees
-    // Modify bookingData to reflect this is a test booking
-    const testBookingData = {
-      ...bookingData,
-      userId: req.user?.id || req.user?.userId,
-      paymentId: razorpay_payment_id,
-      orderId: razorpay_order_id,
-      totalAmount: 10, // Override with 10 rupees
-      status: 'confirmed',
-      paymentStatus: 'paid',
-      paymentMethod: paymentMethod, // Set the actual payment method
-      isPaid: true, // Mark as paid since payment is successful
-      checkInTime: bookingData.checkInTime || "14:00", // Default to 2:00 PM
-      checkOutTime: bookingData.checkOutTime || "12:00", // Default to 12:00 PM
-      createdAt: new Date(),
-      isTestBooking: true, // Flag to indicate this is a test booking
-      // Store payment details for webhook compatibility
-      paymentDetails: {
-        razorpayPaymentId: razorpay_payment_id,
-        razorpayOrderId: razorpay_order_id,
-        paymentCapturedAt: new Date(),
-        paymentMethod: paymentMethod,
-        bank: paymentDetails?.bank || null,
-        cardId: paymentDetails?.card?.id || null,
-        wallet: paymentDetails?.wallet || null,
-        vpa: paymentDetails?.acquirer_data?.upi?.vpa || null,
-        orderAmount: paymentDetails?.amount || 1000, // Amount in paise
-        orderCurrency: paymentDetails?.currency || 'INR'
-      }
+      capturedAt: new Date()
     };
+    booking.status = 'confirmed';
+    booking.paymentStatus = 'paid';
+    booking.paymentDate = new Date();
 
-    // Create booking with test flag
-    const newBooking = new Booking(testBookingData);
-    await newBooking.save();
-    
-    console.log("[PAYMENT] Test booking created successfully:", newBooking._id);
-    console.log("[PAYMENT] Payment method set to:", newBooking.paymentMethod);
+    await booking.save({ session });
+    await session.commitTransaction();
+    session.endSession();
 
-    // Send booking confirmation email (optional for test bookings)
+    // Send email confirmation in the background
     try {
-      await sendBookingConfirmation(newBooking);
-      console.log("[PAYMENT] Test booking confirmation email sent");
+      if (booking.email) {
+        // Use your email sending function here
+        // sendBookingConfirmationEmail(booking).catch(console.error);
+        console.log("[PAYMENT] Will send confirmation email to:", booking.email);
+      }
     } catch (emailError) {
-      console.error("[PAYMENT] Error sending test booking confirmation email:", emailError);
-      // Continue even if email fails
+      console.error("[PAYMENT] Email sending error (non-critical):", emailError);
     }
 
-    // Return success response with booking details
     res.status(200).json({
       success: true,
-      message: 'Test payment verified and booking confirmed',
+      message: 'Payment verified and booking confirmed',
       booking: {
-        id: newBooking._id,
-        villaName: newBooking.villaName,
-        checkIn: newBooking.checkIn,
-        checkOut: newBooking.checkOut,
-        amount: 10, // Fixed test amount
-        status: newBooking.status,
-        isTestBooking: true
+        id: booking._id,
+        status: booking.status,
+        villaName: booking.villaName
       }
     });
+
   } catch (error) {
-    console.error('[PAYMENT] Payment verification error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Payment verification failed',
-      error: process.env.NODE_ENV === 'production' ? 'Verification error' : error.message
+    await session.abortTransaction();
+    session.endSession();
+    console.error('[PAYMENT] Error in verifyPayment:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify payment',
+      details: error.message
     });
   }
 };
@@ -557,7 +505,7 @@ async function sendBookingConfirmation(booking) {
           
           <div class="footer">
             <p>Thank you for choosing LuxorStay Villas!</p>
-            <p>© ${new Date().getFullYear()} LuxorStay Villas. All rights reserved.</p>
+            <p> LuxorStay Villas. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1182,11 +1130,69 @@ export const refundPayment = async (req, res) => {
   }
 };
 
-// Note: Webhook handling has been moved to dedicated webhookRoutes.js
-// This provides better separation of concerns and more comprehensive webhook handling
+// Webhook handler for Razorpay
+export const handleRazorpayWebhook = async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const payload = JSON.stringify(req.body);
+    
+    // Verify webhook signature
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .update(payload)
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      console.error('Invalid webhook signature');
+      return res.status(400).json({ success: false, error: 'Invalid signature' });
+    }
+
+    const event = req.body.event;
+    const payment = req.body.payload.payment?.entity;
+    const order = req.body.payload.order?.entity;
+
+    if (event === 'payment.captured') {
+      // Handle successful payment
+      const bookingId = order.notes?.bookingId;
+      
+      if (!bookingId) {
+        console.error('No booking ID found in order notes');
+        return res.status(400).json({ success: false, error: 'No booking ID found' });
+      }
+
+      // Update booking status
+      const booking = await Booking.findByIdAndUpdate(
+        bookingId,
+        {
+          paymentStatus: 'paid',
+          paymentId: payment.id,
+          paymentMethod: payment.method,
+          paymentDate: new Date(payment.created_at * 1000),
+          status: 'confirmed'
+        },
+        { new: true }
+      );
+
+      if (!booking) {
+        console.error('Booking not found:', bookingId);
+        return res.status(404).json({ success: false, error: 'Booking not found' });
+      }
+
+      // Send booking confirmation email
+      await sendBookingConfirmation(booking);
+      
+      console.log('Payment captured and booking updated:', bookingId);
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 // Helper function to format time from 24-hour to 12-hour format
-const formatTimeFor12Hour = (time24) => {
+function formatTimeFor12Hour(time24) {
   if (!time24) return "2:00 PM"; // Default fallback
   
   const [hours, minutes] = time24.split(':');
@@ -1202,4 +1208,132 @@ const formatTimeFor12Hour = (time24) => {
   } else {
     return `${hour - 12}:${minute} PM`;
   }
+}
+
+// Add this to your paymentController.js
+export const logPaymentError = async (req, res) => {
+  try {
+    const { error, paymentId, orderId } = req.body;
+    
+    console.error("[PAYMENT ERROR LOG]", {
+      timestamp: new Date(),
+      error,
+      paymentId,
+      orderId,
+      userId: req.user?.userId,
+    });
+    
+    // Here you could also save this to a database if needed
+    
+    res.status(200).json({
+      success: true,
+      message: 'Error logged successfully'
+    });
+  } catch (err) {
+    console.error("[PAYMENT] Error logging payment error:", err);
+    res.status(500).json({ success: false });
+  }
 };
+
+// Update the storePaymentDetails function in paymentController.js
+export const storePaymentDetails = async (req, res) => {
+  try {
+    const { 
+      razorpay_payment_id, 
+      razorpay_order_id, 
+      razorpay_signature,
+      bookingDetails 
+    } = req.body;
+    
+    console.log("[PAYMENT] Received payment and booking details:", {
+      paymentId: razorpay_payment_id,
+      bookingDetails: {
+        ...bookingDetails,
+        // Don't log full details for privacy
+        email: bookingDetails.email ? '✓ Present' : '✗ Missing',
+        phone: bookingDetails.phone ? '✓ Present' : '✗ Missing'
+      }
+    });
+    
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing payment details'
+      });
+    }
+
+    // Find user info from token
+    const userId = req.user?.userId;
+    let userEmail = null;
+    
+    // If we have a userId, try to get the user's email
+    if (userId) {
+      try {
+        const user = await User.findById(userId);
+        if (user && user.email) {
+          userEmail = user.email;
+        }
+      } catch (err) {
+        console.log("[PAYMENT] Couldn't fetch user email:", err.message);
+      }
+    }
+
+    // Ensure required fields have default values or use user data when available
+    const sanitizedDetails = {
+      ...bookingDetails,
+      userId: userId,
+      checkIn: bookingDetails.checkIn || new Date(),
+      checkOut: bookingDetails.checkOut || new Date(Date.now() + 24*60*60*1000),
+      guestName: bookingDetails.guestName || 'Guest',
+      // Use email from booking details, fall back to user email, then use placeholder
+      email: bookingDetails.email || userEmail || 'guest@example.com',
+      totalDays: bookingDetails.totalDays || 1,
+      totalAmount: bookingDetails.totalAmount || 10000,
+      guests: bookingDetails.guests || 1
+    };
+
+    // Create new booking with payment details
+    const booking = new Booking({
+      ...sanitizedDetails,
+      payment: {
+        razorpay_payment_id,
+        razorpay_order_id,
+        razorpay_signature,
+        status: 'captured'
+      },
+      status: 'confirmed',
+      paymentStatus: 'paid',
+      paymentDate: new Date(),
+      paymentMethod: 'Razorpay'
+    });
+
+    await booking.save();
+
+    // Send confirmation in the background
+    try {
+      if (sanitizedDetails.email && sanitizedDetails.email !== 'guest@example.com') {
+        // sendBookingConfirmationEmail(booking).catch(console.error);
+        console.log("[PAYMENT] Will send confirmation email to:", sanitizedDetails.email);
+      } else {
+        console.log("[PAYMENT] No valid email to send confirmation");
+      }
+    } catch (emailError) {
+      console.error("[PAYMENT] Email sending error (non-critical):", emailError);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Payment details stored and booking created successfully',
+      bookingId: booking._id
+    });
+  } catch (error) {
+    console.error('[PAYMENT] Error storing payment details:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to store payment details',
+      details: error.message
+    });
+  }
+};
+
+export default router;
