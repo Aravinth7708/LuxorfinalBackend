@@ -91,21 +91,21 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
-          styleSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          "https://fonts.googleapis.com"
-        ],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        styleSrcElem: ["'self'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "https:", "http:"],
         connectSrc: [
           "'self'",
-          process.env.RAZORPAY_API_URL || "https://api.razorpay.com"
+          "https://api.razorpay.com",
+          "https://luxorholidayhomestays.com",
+          "https://www.luxorholidayhomestays.com",
+          "https://luxorfinalbackend.onrender.com"
         ],
         frameSrc: ["'self'", "https://checkout.razorpay.com"],
         formAction: ["'self'", "https://checkout.razorpay.com"]
       }
     },
-    // Enables other headers like X-Frame-Options, X-Content-Type-Options, etc.
     frameguard: { action: "sameorigin" },
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     permissionsPolicy: {
@@ -116,6 +116,7 @@ app.use(
     }
   })
 );
+
 
 app.use(securityHeaders);
 
