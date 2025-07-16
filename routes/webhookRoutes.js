@@ -213,13 +213,11 @@ async function handlePaymentFailed(payment) {
   }
 };
 
-// Handle order paid event
 async function handleOrderPaid(order) {
   try {
     console.log(`✅ Order paid: ${order.id}`);
     
-    // This is a fallback in case payment.captured webhook is missed
-    // Check if we already processed this order
+  
     const existingBooking = await Booking.findOne({ 'payment.orderId': order.id });
     
     if (existingBooking && existingBooking.paymentStatus === 'paid') {

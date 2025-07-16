@@ -15,7 +15,8 @@ export const createBooking = async (req, res) => {
 
     const { 
       villaId, email, guestName, checkIn, checkOut, checkInTime, checkOutTime, 
-      guests, totalAmount, totalDays, infants, address 
+      guests, totalAmount, totalDays, infants, address, 
+      isPaid, paymentId, orderId // Add payment fields
     } = req.body
 
     if (!villaId || !email || !checkIn || !checkOut || !guests) {
@@ -95,6 +96,10 @@ export const createBooking = async (req, res) => {
         city: "",
         zipCode: ""
       },
+      // Add payment details
+      isPaid: isPaid || false,
+      paymentId: paymentId || null,
+      orderId: orderId || null
     })
 
     console.log("[BOOKING] Booking created with userId:", booking.userId)
