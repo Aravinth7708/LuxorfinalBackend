@@ -106,9 +106,12 @@ export const createOrder = async (req, res) => {
     // Create unique receipt ID
     const receiptId = `luxorstay_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     
+    // For testing: Set amount to 1 rupee (100 paise)
+    const testAmount = 100; // 1 rupee in paise
+    
     // Create order in Razorpay
     const order = await razorpay.orders.create({
-      amount: 100, // Convert to paise and ensure it's an integer
+      amount: testAmount, // Fixed 1 rupee for testing
       currency,
       receipt: receiptId,
       notes: {
@@ -121,9 +124,12 @@ export const createOrder = async (req, res) => {
         checkInTime,
         checkOutTime,
         guests,
-        userId: req.user?.id || req.user?.userId
+        userId: req.user?.id || req.user?.userId,
+        isTestPayment: true // Mark as test payment
       }
     });
+    
+    console.log(`[TEST MODE] Created order for 1 rupee (${testAmount} paise)`);
 
     console.log("[PAYMENT] Order created successfully:", order.id);
 
@@ -198,35 +204,24 @@ export const verifyPayment = async (req, res) => {
     // First try with direct bookingId if provided
     if (bookingId && mongoose.Types.ObjectId.isValid(bookingId)) {
       query = { _id: bookingId };
-      booking = await Booking.findOne(query).session(session);
-    }
-    
-    // If not found, try with razorpay_order_id
-    if (!booking && razorpay_order_id) {
-      query = { 'payment.razorpay_order_id': razorpay_order_id };
-      booking = await Booking.findOne(query).session(session);
-    }
-    
-    // If still not found, try to find the order info from Razorpay
-    if (!booking && razorpay_order_id) {
-      try {
-        const orderInfo = await razorpay.orders.fetch(razorpay_order_id);
-        if (orderInfo && orderInfo.notes && orderInfo.notes.bookingId) {
-          query = { _id: orderInfo.notes.bookingId };
-          booking = await Booking.findOne(query).session(session);
-        }
-      } catch (err) {
-        console.error("[PAYMENT] Error fetching order info from Razorpay:", err);
-      }
+    } else if (razorpay_order_id) {
+      // Fallback to orderId if bookingId is not present
+      query = { orderId: razorpay_order_id };
     }
 
-    // If still no booking found, this is an error
-    if (!booking) {
-      console.error("[PAYMENT] Booking not found for verification:", {
-        bookingId,
-        razorpay_order_id,
-        query
+    if (Object.keys(query).length === 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot find booking without a valid bookingId or orderId'
       });
+    }
+
+    booking = await Booking.findOne(query).session(session);
+
+    if (!booking) {
+      console.error('[PAYMENT] Booking not found with query:', query);
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({
@@ -235,52 +230,63 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    // Update booking with payment info
-    booking.payment = {
-      ...booking.payment,
-      status: 'captured',
-      razorpay_payment_id,
-      razorpay_order_id,
-      razorpay_signature,
-      capturedAt: new Date()
-    };
+    // Update booking with payment details
+    booking.paymentId = razorpay_payment_id;
+    booking.orderId = razorpay_order_id;
+    booking.isPaid = true;
     booking.status = 'confirmed';
     booking.paymentStatus = 'paid';
     booking.paymentDate = new Date();
+    
+    // Save the updated booking with the session
+    const updatedBooking = await booking.save({ session });
+    
+    if (!updatedBooking) {
+      throw new Error('Failed to update booking with payment details');
+    }
+    
+    console.log('[PAYMENT] Updated booking with payment details:', {
+      bookingId: updatedBooking._id,
+      paymentId: updatedBooking.paymentId,
+      orderId: updatedBooking.orderId,
+      status: updatedBooking.status
+    });
 
-    await booking.save({ session });
+    // Fetch the associated villa to pass to the confirmation email
+    const villa = await Villa.findById(booking.villaId).session(session);
+    if (!villa) {
+      // Even if the villa isn't found, the booking is still successful.
+      // Log the error but don't fail the transaction.
+      console.error(`[PAYMENT] Villa with ID ${booking.villaId} not found for booking ${booking._id}`);
+    } else {
+      // Send confirmation email
+      try {
+        await sendBookingConfirmation(booking, villa);
+        console.log(`[PAYMENT] Confirmation email sent for booking ${booking._id}`);
+      } catch (emailError) {
+        console.error(`[PAYMENT] Failed to send confirmation email for booking ${booking._id}:`, emailError);
+        // Do not abort the transaction if the email fails
+      }
+    }
+
     await session.commitTransaction();
     session.endSession();
 
-    // Send email confirmation in the background
-    try {
-      if (booking.email) {
-        // Use your email sending function here
-        // sendBookingConfirmationEmail(booking).catch(console.error);
-        console.log("[PAYMENT] Will send confirmation email to:", booking.email);
-      }
-    } catch (emailError) {
-      console.error("[PAYMENT] Email sending error (non-critical):", emailError);
-    }
+    console.log(`[PAYMENT] Successfully verified payment and updated booking ${booking._id}`);
 
     res.status(200).json({
       success: true,
       message: 'Payment verified and booking confirmed',
-      booking: {
-        id: booking._id,
-        status: booking.status,
-        villaName: booking.villaName
-      }
+      bookingId: booking._id
     });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    console.error('[PAYMENT] Error in verifyPayment:', error);
+    console.error('[PAYMENT] Verification error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to verify payment',
-      details: error.message
+      error: 'Payment verification failed',
+      details: process.env.NODE_ENV === 'production' ? undefined : error.message
     });
   }
 };
@@ -1115,7 +1121,7 @@ export const refundPayment = async (req, res) => {
       message: 'Refund processed successfully',
       refund: {
         id: refund.id,
-        amount: refund.amount / 100, // Convert from paise
+        amount: refund.amount ,// 100, // Convert from paise
         status: refund.status,
         speedProcessed: refund.speed_processed
       }
