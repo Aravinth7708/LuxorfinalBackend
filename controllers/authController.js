@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { generateOTP, sendOTPEmail } from '../utils/mailService.js';
 import { OAuth2Client } from 'google-auth-library';
 import nodemailer from 'nodemailer';
+import cookieParser from 'cookie-parser';
 
 // Handle Firebase Admin import gracefully
 let admin = null;
@@ -20,6 +21,18 @@ try {
 dotenv.config();
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Helper function to set secure cookie
+const setTokenCookie = (res, token) => {
+  // Set HTTP-only cookie
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // true in production
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/'
+  });
+};
 
 // Modified to start registration process with OTP
 export const register = async (req, res) => {
@@ -229,14 +242,12 @@ export const login = async (req, res) => {
       }
     );
     
-    // Update last login time
-    user.lastLogin = new Date();
-    await user.save();
+    // Set token in cookie
+    setTokenCookie(res, token);
     
-    // Return user without password
+    // Return user without including token in response body
     const userWithoutPassword = {
       _id: user._id,
-      id: user._id,
       name: user.name,
       email: user.email,
       profileImage: user.profileImage,
@@ -245,8 +256,7 @@ export const login = async (req, res) => {
     };
     
     res.json({ 
-      success: true, 
-      token, 
+      success: true,
       user: userWithoutPassword
     });
   } catch (err) {
@@ -353,11 +363,13 @@ export const handleGoogleAuth = async (req, res) => {
       { expiresIn: '30d' }
     );
     
+    // Set token in cookie
+    setTokenCookie(res, jwtToken);
+    
     console.log(`[AUTH] Successful Google auth for user: ${user._id} (${user.email}), role: ${user.role}`);
     
     // Return user data and token
     return res.status(200).json({
-      token: jwtToken,
       success: true,
       isNewUser,
       isAdmin: user.role === 'admin',
@@ -375,8 +387,7 @@ export const handleGoogleAuth = async (req, res) => {
     console.error('[AUTH] Google auth error:', error);
     return res.status(500).json({ 
       success: false,
-      message: 'Authentication failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Authentication failed'
     });
   }
 };
@@ -773,9 +784,13 @@ export const verifyResetOTP = async (req, res) => {
 
 // --- Additional Auth Controller handlers ---
 export const logout = (req, res) => {
-  // With JWT, logout is handled client-side by discarding the token.
-  // We still provide an endpoint so the client can hit it and clear cookies/localStorage if needed.
-  return res.json({ success: true, message: 'Logged out' });
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/'
+  });
+  return res.json({ success: true, message: 'Logged out successfully' });
 };
 
 export const refreshToken = (req, res) => {

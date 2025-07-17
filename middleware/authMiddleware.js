@@ -55,30 +55,21 @@ const verifyGoogleToken = async (token) => {
 
 export const authMiddleware = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    // Get token from cookie instead of Authorization header
+    const token = req.cookies.token;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log("[AUTH] Missing or invalid Authorization header:", authHeader);
+    if (!token) {
+      console.log("[AUTH] No token found in cookies");
       return res.status(401).json({ 
         error: 'Authentication required',
         details: 'No authentication token provided'
       });
     }
     
-    const token = authHeader.split(' ')[1];
-    
-    if (!token) {
-      console.log("[AUTH] No token extracted from Authorization header");
-      return res.status(401).json({ 
-        error: 'Authentication failed',
-        details: 'Invalid token format' 
-      });
-    }
-    
- 
+    // Log truncated token for debugging
     const truncatedToken = token.length > 10 ? 
       `${token.substring(0, 10)}...` : 'invalid-token';
-    console.log(`[AUTH] Validating token: ${truncatedToken}`);
+    console.log(`[AUTH] Validating token from cookie: ${truncatedToken}`);
     
     try {
   
@@ -174,8 +165,7 @@ export const authMiddleware = async (req, res, next) => {
       });
     }
   } catch (error) {
-    console.error('[AUTH] Auth middleware error:', error.message);
-    
+    console.error('[AUTH] Auth middleware error:', error);
     res.status(500).json({ 
       error: 'Server error',
       details: 'Authentication process failed' 

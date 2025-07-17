@@ -14,6 +14,7 @@ import helmet from 'helmet';
 import { validateEnv } from './utils/validateEnv.js';
 import bodyParser from 'body-parser';
 import { rateLimit } from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 
 // ES module fix for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -66,7 +67,6 @@ app.set('strict routing', false);
 const basicRouter = express.Router();
 app.use(basicRouter);
 
-// Make sure express.Router exists and is properly initialized
 if (!express.Router) {
   console.error("ERROR: express.Router is not defined!");
   // Create a basic polyfill for Router
@@ -75,7 +75,7 @@ if (!express.Router) {
   };
 }
 
-// Improved error handling for serverless environments
+
 const isVercel = process.env.VERCEL === '1';
 
 // Add request logging middleware for better debugging on Vercel
@@ -143,6 +143,8 @@ app.use('/api/auth', authLimiter);
 // Body parser middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+app.use(cookieParser());
 
 // Special handling for webhook - raw body is needed for signature verification
 app.use('/api/payments/webhook', bodyParser.raw({ type: 'application/json' }));
