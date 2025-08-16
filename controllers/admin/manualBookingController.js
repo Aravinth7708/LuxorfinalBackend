@@ -282,10 +282,13 @@ export const getVillaBlockedDates = async (req, res) => {
     
     console.log("[MANUAL BOOKING] Found villa:", villa.name);
 
-    // Find all confirmed bookings for this villa
+    // First, expire any bookings that have passed their checkout date
+    await Booking.expireBookings();
+
+    // Find all confirmed bookings for this villa (exclude cancelled and expired)
     const bookings = await Booking.find({
       villaId,
-      status: { $ne: "cancelled" }
+      status: { $in: ["confirmed", "pending"] }
     }).select('checkIn checkOut _id');
 
     console.log(`[MANUAL BOOKING] Found ${bookings.length} bookings for villa ${villaId}`);

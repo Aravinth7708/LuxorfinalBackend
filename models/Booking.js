@@ -67,7 +67,7 @@ const bookingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "cancelled", "completed"],
+      enum: ["pending", "confirmed", "cancelled", "completed", "expired"],
       default: "confirmed",
     },
     paymentMethod: {
@@ -126,6 +126,12 @@ const bookingSchema = new mongoose.Schema(
       default: 0,
     },
 
+    // Expiry fields
+    expiredAt: {
+      type: Date,
+      default: null,
+    },
+
     cancellationHistory: [
       {
         cancelledAt: Date,
@@ -147,6 +153,34 @@ bookingSchema.index({ email: 1 })
 bookingSchema.index({ villaId: 1 })
 bookingSchema.index({ status: 1 })
 bookingSchema.index({ checkIn: 1, checkOut: 1 })
+bookingSchema.index({ expiredAt: 1 })
+
+// Static method to expire bookings that have passed their checkout date
+bookingSchema.statics.expireBookings = async function() {
+  const currentDate = new Date();
+  
+  try {
+    const result = await this.updateMany(
+      {
+        status: { $in: ["confirmed", "pending"] },
+        checkOut: { $lt: currentDate },
+        expiredAt: null
+      },
+      {
+        $set: {
+          status: "expired",
+          expiredAt: currentDate
+        }
+      }
+    );
+    
+    console.log(`[BOOKING] Expired ${result.modifiedCount} bookings`);
+    return result;
+  } catch (error) {
+    console.error("[BOOKING] Error expiring bookings:", error);
+    throw error;
+  }
+};
 
 // Pre-save hook to calculate total amount if it's missing
 bookingSchema.pre("save", function (next) {

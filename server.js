@@ -41,6 +41,7 @@ import profileRoutes from './routes/profileRoutes.js';
 import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
+import userAmenitiesRoutes from './routes/amenitiesRoutes.js'; // User amenities routes
 import adminPhoneUserRoutes from './routes/admin/adminPhoneUserRoutes.js';
 import cancelRequestRoutes from './routes/admin/cancelRequestRoutes.js'; // Add this import with your other imports
 import amenitiesRoutes from './routes/admin/amenitiesRoutes.js'; // Add this import with your other imports
@@ -49,6 +50,10 @@ import adminNewsletterRoutes from './routes/admin/newsletterRoutes.js';
 import manualBookingRoutes from './routes/admin/manualBookingRoutes.js'; // Add this import with your other imports
 import villaImageRoutes from './routes/admin/villaImageRoutes.js'; // Add this import with your other imports
 import villaManagementRoutes from './routes/admin/villaManagementRoutes.js'; // Add this import with your other imports
+
+// Import Booking model for expiry scheduler
+// import Booking from './models/Booking.js';
+import Booking from './models/Booking.js'; // Import Booking model for scheduled tasks
 
 connectDB()
   .then(() => console.log('Database connection established'))
@@ -177,6 +182,7 @@ app.use('/api/photo-gallery', photoGalleryRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/complete/profile', phoneProfileRoutes);
+app.use('/api/amenities', userAmenitiesRoutes); // User amenities routes
 
 // Payment routes - mount before catch-all routes
 app.use('/api/payments', paymentRoutes);
@@ -295,6 +301,29 @@ if (process.env.NODE_ENV === 'production') {
 function startHttpServer() {
   app.listen(process.env.PORT || 5000, () => {
     console.log(`HTTP Server running on port ${process.env.PORT || 5000}`);
+    
+    // Start the booking expiry scheduler
+    startBookingExpiryScheduler();
   });
+}
+
+// Function to automatically expire bookings periodically
+function startBookingExpiryScheduler() {
+  // Run immediately on server start
+  expireBookings();
+  
+  // Then run every hour (3600000 milliseconds)
+  setInterval(expireBookings, 3600000);
+  
+  console.log('[SCHEDULER] Booking expiry scheduler started - will run every hour');
+}
+
+async function expireBookings() {
+  try {
+    await Booking.expireBookings();
+    console.log('[SCHEDULER] Booking expiry check completed');
+  } catch (error) {
+    console.error('[SCHEDULER] Error running booking expiry:', error);
+  }
 }
 }

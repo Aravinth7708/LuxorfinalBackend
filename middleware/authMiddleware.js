@@ -55,11 +55,22 @@ const verifyGoogleToken = async (token) => {
 
 export const authMiddleware = async (req, res, next) => {
   try {
-    // Get token from cookie instead of Authorization header
-    const token = req.cookies.token;
+    // Get token from cookie or Authorization header
+    let token = req.cookies.token;
+    
+    // If no token in cookies, check Authorization header
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+        console.log("[AUTH] Token found in Authorization header");
+      }
+    } else {
+      console.log("[AUTH] Token found in cookies");
+    }
     
     if (!token) {
-      console.log("[AUTH] No token found in cookies");
+      console.log("[AUTH] No token found in cookies or Authorization header");
       return res.status(401).json({ 
         error: 'Authentication required',
         details: 'No authentication token provided'

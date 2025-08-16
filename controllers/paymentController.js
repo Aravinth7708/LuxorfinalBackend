@@ -41,7 +41,8 @@ export const createOrder = async (req, res) => {
       guests,
       infants,
       totalDays,
-      totalNights
+      totalNights,
+      originalCalculatedAmount // For storing the real booking amount
     } = req.body;
 
     // Validate required fields
@@ -53,12 +54,37 @@ export const createOrder = async (req, res) => {
       });
     }
     
-    // Check if amount is a valid number
-    if (isNaN(amount) || amount <= 0) {
+    // Convert amount to number and validate
+    const numericAmount = Number(amount);
+    console.log("[PAYMENT] Amount validation:", { 
+      originalAmount: amount, 
+      numericAmount: numericAmount,
+      isValid: !isNaN(numericAmount) && numericAmount > 0
+    });
+
+    // Check if amount is a valid number and reasonable
+    if (isNaN(numericAmount) || numericAmount <= 0) {
       console.error("[PAYMENT] Invalid amount:", amount);
       return res.status(400).json({
         success: false,
         message: 'Invalid payment amount'
+      });
+    }
+
+    // Additional validation for amount range
+    if (numericAmount < 1) { // Minimum ₹100
+      console.error("[PAYMENT] Amount too small:", numericAmount);
+      return res.status(400).json({
+        success: false,
+        message: 'Payment amount is too small (minimum ₹100)'
+      });
+    }
+
+    if (numericAmount > 1000000) { // Maximum ₹10 lakh
+      console.error("[PAYMENT] Amount too large:", numericAmount);
+      return res.status(400).json({
+        success: false,
+        message: 'Payment amount is too large (maximum ₹10,00,000)'
       });
     }
 
@@ -106,12 +132,18 @@ export const createOrder = async (req, res) => {
     // Create unique receipt ID
     const receiptId = `luxorstay_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     
-    // For testing: Set amount to 1 rupee (100 paise)
-    const testAmount = 100; // 1 rupee in paise
+    // Use the actual amount for orders (not test amount)
+    const orderAmount = Math.round(numericAmount * 100); // Convert to paise for Razorpay
+    
+    console.log("[PAYMENT] Creating order with amount:", {
+      originalAmount: numericAmount,
+      razorpayAmount: orderAmount,
+      currency: currency
+    });
     
     // Create order in Razorpay
     const order = await razorpay.orders.create({
-      amount: testAmount, // Fixed 1 rupee for testing
+      amount: orderAmount, // Actual amount in paise
       currency,
       receipt: receiptId,
       notes: {
@@ -125,11 +157,11 @@ export const createOrder = async (req, res) => {
         checkOutTime,
         guests,
         userId: req.user?.id || req.user?.userId,
-        isTestPayment: true // Mark as test payment
+        actualAmount: numericAmount // Store original amount for reference
       }
     });
     
-    console.log(`[TEST MODE] Created order for 1 rupee (${testAmount} paise)`);
+    console.log(`[PAYMENT] Created order for ₹${numericAmount} (${orderAmount} paise)`);
 
     console.log("[PAYMENT] Order created successfully:", order.id);
 
@@ -313,9 +345,6 @@ async function sendBookingConfirmation(booking) {
     // Create booking number (use first 6 chars of ID)
     const bookingNumber = String(booking._id).substring(0, 6).toUpperCase();
     
-    // Generate PDF booking ticket
-    const pdfPath = await generateBookingTicketPDF(booking, villa, formattedCheckIn, formattedCheckOut, bookingNumber);
-
     // Setup email transport
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -505,7 +534,6 @@ async function sendBookingConfirmation(booking) {
               <li>A refundable security deposit of ₹20,000 may be collected upon arrival.</li>
               <li>Please have a valid ID ready for check-in.</li>
               <li>For any assistance, please contact us at luxorholidayhomestays@gmail.com</li>
-              <li><strong>Your booking ticket is attached as a PDF.</strong> Please save or print it for your records.</li>
             </ul>
           </div>
           
@@ -516,23 +544,13 @@ async function sendBookingConfirmation(booking) {
         </div>
       </body>
       </html>
-      `,
-      attachments: [
-        {
-          filename: `LuxorStay_Booking_${bookingNumber}.pdf`,
-          path: pdfPath,
-          contentType: 'application/pdf'
-        }
-      ]
+      `
     };
 
-    // Send email with PDF attachment
+    // Send email without PDF attachment
     await transporter.sendMail(mailOptions);
     
-    // Clean up - remove temporary PDF file
-    fs.unlinkSync(pdfPath);
-    
-    console.log(`[EMAIL] Booking confirmation with PDF ticket sent to ${booking.email}`);
+    console.log(`[EMAIL] Booking confirmation sent to ${booking.email}`);
     
   } catch (error) {
     console.error("[EMAIL] Error sending booking confirmation:", error);
@@ -1294,9 +1312,25 @@ export const storePaymentDetails = async (req, res) => {
       // Use email from booking details, fall back to user email, then use placeholder
       email: bookingDetails.email || userEmail || 'guest@example.com',
       totalDays: bookingDetails.totalDays || 1,
-      totalAmount: bookingDetails.totalAmount || 10000,
+      // Ensure totalAmount is properly validated and stored
+      totalAmount: Number(bookingDetails.totalAmount) || 0,
       guests: bookingDetails.guests || 1
     };
+
+    // Validate the totalAmount before creating booking
+    if (!sanitizedDetails.totalAmount || sanitizedDetails.totalAmount <= 0) {
+      console.error("[PAYMENT] Invalid totalAmount in booking details:", sanitizedDetails.totalAmount);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid total amount in booking details'
+      });
+    }
+
+    console.log("[PAYMENT] Creating booking with validated amount:", {
+      totalAmount: sanitizedDetails.totalAmount,
+      guestName: sanitizedDetails.guestName,
+      email: sanitizedDetails.email
+    });
 
     // Create new booking with payment details
     const booking = new Booking({

@@ -31,30 +31,30 @@ export const createBooking = async (req, res) => {
       return res.status(401).json({ error: "Authentication required" })
     }
 
-    // Validate totalAmount
-    let calculatedDays // Declare calculatedDays variable
-    if (isNaN(totalAmount) || totalAmount <= 0) {
-      console.error("[BOOKING] Invalid totalAmount:", totalAmount)
-      const villa = await Villa.findById(villaId)
-      if (!villa) {
-        console.error("[BOOKING] Villa not found for id:", villaId)
-        return res.status(404).json({ error: "Villa not found" })
-      }
+    // Validate totalAmount - ensure it's a valid number
+    if (!totalAmount || isNaN(totalAmount) || totalAmount <= 0) {
+      console.error("[BOOKING] Invalid or missing totalAmount:", totalAmount)
+      return res.status(400).json({ 
+        error: "Invalid total amount", 
+        message: "Total amount must be a valid positive number" 
+      })
+    }
 
-      // Calculate dates difference
-      const start = new Date(checkIn)
-      const end = new Date(checkOut)
-      const diffTime = Math.abs(end - start)
-      calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    // Additional validation: totalAmount should be reasonable (not too small or too large)
+    if (totalAmount < 100) { // Minimum ₹100
+      console.error("[BOOKING] Total amount too small:", totalAmount)
+      return res.status(400).json({ 
+        error: "Invalid total amount", 
+        message: "Total amount is too small" 
+      })
+    }
 
-      // Calculate total amount
-      const basePrice = villa.price * calculatedDays
-      const serviceFee = Math.round(basePrice * 0.05)
-      const taxAmount = Math.round((basePrice + serviceFee) * 0.18)
-      const calculatedTotalAmount = Math.round(basePrice + serviceFee + taxAmount)
-
-      console.log("[BOOKING] Recalculated totalAmount:", calculatedTotalAmount)
-      req.body.totalAmount = calculatedTotalAmount
+    if (totalAmount > 1000000) { // Maximum ₹10 lakh
+      console.error("[BOOKING] Total amount too large:", totalAmount)
+      return res.status(400).json({ 
+        error: "Invalid total amount", 
+        message: "Total amount is too large" 
+      })
     }
 
     console.log("[BOOKING] Looking for villa with id:", villaId)
@@ -74,6 +74,21 @@ export const createBooking = async (req, res) => {
     }
 
     console.log("[BOOKING] Creating booking for villa:", villa.name)
+    
+    // Calculate days if not provided
+    const start = new Date(checkIn)
+    const end = new Date(checkOut)
+    const diffTime = Math.abs(end - start)
+    const calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    console.log("[BOOKING] Final booking details:", {
+      villaName: villa.name,
+      totalAmount: totalAmount,
+      totalDays: totalDays || calculatedDays,
+      guests: guests,
+      userId: userId
+    })
+    
     const booking = await Booking.create({
       villaId,
       villaName: villa.name,
@@ -85,7 +100,7 @@ export const createBooking = async (req, res) => {
       checkInTime: checkInTime || "14:00", // Default to 2:00 PM
       checkOutTime: checkOutTime || "12:00", // Default to 12:00 PM
       guests,
-      totalAmount: req.body.totalAmount || totalAmount,
+      totalAmount: totalAmount, // Use the validated totalAmount
       totalDays: totalDays || calculatedDays,
       infants: infants || 0,
       // Save address information if provided
@@ -102,7 +117,13 @@ export const createBooking = async (req, res) => {
       orderId: orderId || null
     })
 
-    console.log("[BOOKING] Booking created with userId:", booking.userId)
+    console.log("[BOOKING] Booking created successfully:", {
+      id: booking._id,
+      userId: booking.userId,
+      totalAmount: booking.totalAmount,
+      totalDays: booking.totalDays,
+      status: booking.status
+    })
 
     // Send confirmation email with PDF attachment
     try {
@@ -343,6 +364,10 @@ export const getUserBookings = async (req, res) => {
     }
 
     console.log(`[BOOKING] Looking for bookings with email: ${userEmail}`)
+    
+    // First, expire any bookings that have passed their checkout date
+    await Booking.expireBookings();
+    
     const bookings = await Booking.find({ email: userEmail })
     console.log(`[BOOKING] Found ${bookings.length} bookings for email ${userEmail}`)
 
@@ -593,9 +618,12 @@ export const getBlockedDates = async (req, res) => {
   try {
     const { villaId } = req.params
 
+    // First, expire any bookings that have passed their checkout date
+    await Booking.expireBookings();
+
     const bookings = await Booking.find({
       villaId,
-      status: { $in: ["confirmed", "pending"] }, // Only block if not cancelled
+      status: { $in: ["confirmed", "pending"] }, // Only block if not cancelled or expired
     }).select("checkIn checkOut -_id") // only need dates
 
     // Convert to an array of date ranges
