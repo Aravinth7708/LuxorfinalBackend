@@ -42,9 +42,11 @@ import phoneProfileRoutes from './routes/phoneProfileRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
 import userAmenitiesRoutes from './routes/amenitiesRoutes.js'; // User amenities routes
+import userOffersRoutes from './routes/offersRoutes.js'; // User offers routes
 import adminPhoneUserRoutes from './routes/admin/adminPhoneUserRoutes.js';
 import cancelRequestRoutes from './routes/admin/cancelRequestRoutes.js'; // Add this import with your other imports
 import amenitiesRoutes from './routes/admin/amenitiesRoutes.js'; // Add this import with your other imports
+import offersRoutes from './routes/admin/offersRoutes.js'; // Admin offers routes
 import userProfileRoutes from './routes/admin/userProfileRoutes.js';
 import adminNewsletterRoutes from './routes/admin/newsletterRoutes.js';
 import manualBookingRoutes from './routes/admin/manualBookingRoutes.js'; // Add this import with your other imports
@@ -183,6 +185,7 @@ app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/complete/profile', phoneProfileRoutes);
 app.use('/api/amenities', userAmenitiesRoutes); // User amenities routes
+app.use('/api/offers', userOffersRoutes); // User offers routes
 
 // Payment routes - mount before catch-all routes
 app.use('/api/payments', paymentRoutes);
@@ -194,6 +197,7 @@ app.use('/api/webhook', webhookRoutes);
 app.use('/api/admin', adminPhoneUserRoutes);
 app.use('/api/cancel-requests', cancelRequestRoutes);
 app.use('/api/admin/amenities', amenitiesRoutes);
+app.use('/api/admin/offers', offersRoutes); // Admin offers routes
 app.use('/api/admin/newsletter', adminNewsletterRoutes);
 app.use('/api/admin/user-profiles', userProfileRoutes);
 app.use('/api/admin/manual-bookings', manualBookingRoutes);
