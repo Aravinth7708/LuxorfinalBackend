@@ -123,14 +123,12 @@ export const updateUserProfile = async (req, res) => {
    
       if (cleanedPhone) {
         const fullPhoneNumber = `${profileData.countryCode || '+91'}${cleanedPhone}`;
-        
-        // Check in PhoneUser collection
+    
         const existingPhoneUser = await PhoneUser.findOne({ 
           phoneNumber: fullPhoneNumber,
           email: { $ne: userEmail } // Exclude current user's email
         });
-        
-        // Check in User collection
+     
         const existingUser = await User.findOne({ 
           $or: [
             { phone: fullPhoneNumber },
