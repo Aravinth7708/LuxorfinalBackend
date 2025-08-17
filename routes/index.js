@@ -8,7 +8,8 @@ import authRoutes from './authRoutes.js';
 import villaRoutes from './villaRoutes.js';
 import bookingRoutes from './bookingRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
-import phoneProfileRoutes from './phoneProfileRoutes.js'; 
+import phoneProfileRoutes from './phoneProfileRoutes.js';
+import blockedDatesRoutes from './blockedDatesRoutes.js';
 
 const router = express.Router();
 
@@ -27,5 +28,6 @@ router.use('/villas', villaRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/complete/profile', phoneProfileRoutes);
+router.use('/admin/blocked-dates', blockedDatesRoutes);
 
 export default router;

@@ -52,6 +52,7 @@ import adminNewsletterRoutes from './routes/admin/newsletterRoutes.js';
 import manualBookingRoutes from './routes/admin/manualBookingRoutes.js'; // Add this import with your other imports
 import villaImageRoutes from './routes/admin/villaImageRoutes.js'; // Add this import with your other imports
 import villaManagementRoutes from './routes/admin/villaManagementRoutes.js'; // Add this import with your other imports
+import blockedDatesRoutes from './routes/blockedDatesRoutes.js'; // Add blocked dates routes
 
 // Import Booking model for expiry scheduler
 // import Booking from './models/Booking.js';
@@ -202,6 +203,7 @@ app.use('/api/admin/newsletter', adminNewsletterRoutes);
 app.use('/api/admin/user-profiles', userProfileRoutes);
 app.use('/api/admin/manual-bookings', manualBookingRoutes);
 app.use('/api/admin/villa-images', villaImageRoutes);
+app.use('/api/admin/blocked-dates', blockedDatesRoutes); // Add blocked dates routes
 app.use('/api/villas', villaManagementRoutes);
 
 app.get('/api/rooms/:id', (req, res) => {

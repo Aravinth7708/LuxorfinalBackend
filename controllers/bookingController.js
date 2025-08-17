@@ -4,6 +4,7 @@ import Villa from '../models/Villa.js';
 import UserProfile from "../models/UserProfile.js";
 import User from "../models/User.js";
 import PhoneUser from "../models/PhoneUser.js";
+import BlockedDate from '../models/BlockedDate.js';
 
 // Import our new email service
 import { sendBookingConfirmationEmail, sendCancellationEmail } from "../utils/email.js";
@@ -80,6 +81,52 @@ export const createBooking = async (req, res) => {
     const end = new Date(checkOut)
     const diffTime = Math.abs(end - start)
     const calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // Check for overlapping bookings
+    const overlappingBooking = await Booking.findOne({
+      villaId,
+      status: { $in: ['confirmed', 'pending'] },
+      $or: [
+        // New booking starts during existing booking
+        { 
+          checkIn: { $lte: start }, 
+          checkOut: { $gt: start } 
+        },
+        // New booking ends during existing booking
+        { 
+          checkIn: { $lt: end }, 
+          checkOut: { $gte: end } 
+        },
+        // New booking completely contains existing booking
+        { 
+          checkIn: { $gte: start }, 
+          checkOut: { $lte: end } 
+        },
+        // Existing booking completely contains new booking
+        { 
+          checkIn: { $lte: start }, 
+          checkOut: { $gte: end } 
+        }
+      ]
+    })
+    
+    if (overlappingBooking) {
+      console.error("[BOOKING] Overlapping booking found:", overlappingBooking._id)
+      return res.status(400).json({ 
+        error: "Villa not available", 
+        message: `This villa is already booked from ${overlappingBooking.checkIn.toDateString()} to ${overlappingBooking.checkOut.toDateString()}` 
+      })
+    }
+    
+    // Check for blocked dates
+    const isBlocked = await BlockedDate.isVillaBlocked(villaId, start, end)
+    if (isBlocked) {
+      console.error("[BOOKING] Villa is blocked for selected dates")
+      return res.status(400).json({ 
+        error: "Villa not available", 
+        message: "This villa is not available for the selected dates due to maintenance or other reasons" 
+      })
+    }
     
     console.log("[BOOKING] Final booking details:", {
       villaName: villa.name,
@@ -584,16 +631,39 @@ export const checkAvailability = async (req, res) => {
 
     console.log(`[BOOKING] Found ${bookings.length} bookings for villa ${villaId}`);
 
-    // Format the blocked dates for response
-    const blockedDates = bookings.map(booking => ({
+    // Find all blocked dates for this villa
+    const blockedDates = await BlockedDate.find({
+      villa: villaId,
+      isDeleted: false,
+      endDate: { $gte: new Date() } // Only future or current blocked dates
+    }).select('startDate endDate reason category');
+
+    console.log(`[BOOKING] Found ${blockedDates.length} blocked date ranges for villa ${villaId}`);
+
+    // Format the blocked dates from bookings for response
+    const bookingBlockedDates = bookings.map(booking => ({
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
-      bookingId: booking._id.toString()
+      bookingId: booking._id.toString(),
+      type: 'booking'
     }));
+
+    // Format the admin blocked dates for response
+    const adminBlockedDates = blockedDates.map(blocked => ({
+      checkIn: blocked.startDate,
+      checkOut: blocked.endDate,
+      blockedId: blocked._id.toString(),
+      reason: blocked.reason,
+      category: blocked.category,
+      type: 'blocked'
+    }));
+
+    // Combine both types of blocked dates
+    const allBlockedDates = [...bookingBlockedDates, ...adminBlockedDates];
 
     return res.status(200).json({
       success: true,
-      blockedDates
+      blockedDates: allBlockedDates
     });
   } catch (error) {
     console.error("[BOOKING] Error checking availability:", error);
@@ -622,19 +692,41 @@ export const getBlockedDates = async (req, res) => {
     // First, expire any bookings that have passed their checkout date
     await Booking.expireBookings();
 
+    // Get booking-based blocked dates
     const bookings = await Booking.find({
       villaId,
       status: { $in: ["confirmed", "pending"] }, // Only block if not cancelled or expired
     }).select("checkIn checkOut -_id") // only need dates
 
-    // Convert to an array of date ranges
-    const blockedDates = bookings.map((booking) => ({
+    // Get admin-blocked dates
+    const adminBlockedDates = await BlockedDate.find({
+      villa: villaId,
+      isDeleted: false,
+      endDate: { $gte: new Date() } // Only future or current blocked dates
+    }).select('startDate endDate reason category');
+
+    // Convert bookings to blocked date format
+    const bookingBlockedDates = bookings.map((booking) => ({
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
-    }))
+      type: 'booking'
+    }));
 
-    res.status(200).json({ blockedDates })
+    // Convert admin blocked dates to the same format
+    const adminBlockedDatesFormatted = adminBlockedDates.map(blocked => ({
+      checkIn: blocked.startDate,
+      checkOut: blocked.endDate,
+      reason: blocked.reason,
+      category: blocked.category,
+      type: 'blocked'
+    }));
+
+    // Combine both types of blocked dates
+    const allBlockedDates = [...bookingBlockedDates, ...adminBlockedDatesFormatted];
+
+    res.status(200).json({ blockedDates: allBlockedDates })
   } catch (err) {
+    console.error("Error fetching blocked dates:", err);
     res.status(500).json({ message: "Error fetching blocked dates", error: err.message })
   }
 }
