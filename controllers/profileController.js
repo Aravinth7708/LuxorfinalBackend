@@ -115,9 +115,44 @@ export const updateUserProfile = async (req, res) => {
 
     console.log("Updating profile with data:", profileData);
 
-    // Clean phone number if provided
+   
+    let cleanedPhone = "";
     if (profileData.phone) {
-      profileData.phone = profileData.phone.replace(/\s+/g, '').replace(/[-+()]/g, '');
+      cleanedPhone = profileData.phone.replace(/\s+/g, '').replace(/[-+()]/g, '');
+      
+   
+      if (cleanedPhone) {
+        const fullPhoneNumber = `${profileData.countryCode || '+91'}${cleanedPhone}`;
+        
+        // Check in PhoneUser collection
+        const existingPhoneUser = await PhoneUser.findOne({ 
+          phoneNumber: fullPhoneNumber,
+          email: { $ne: userEmail } // Exclude current user's email
+        });
+        
+        // Check in User collection
+        const existingUser = await User.findOne({ 
+          $or: [
+            { phone: fullPhoneNumber },
+            { phoneNumber: fullPhoneNumber }
+          ],
+          email: { $ne: userEmail } // Exclude current user's email
+        });
+        
+        // Check in UserProfile collection
+        const existingUserProfile = await UserProfile.findOne({ 
+          phone: cleanedPhone,
+          email: { $ne: userEmail } // Exclude current user's email
+        });
+        
+        if (existingPhoneUser || existingUser || existingUserProfile) {
+          return res.status(400).json({
+            success: false,
+            error: "Phone number already registered",
+            message: "This phone number is already associated with another account. Please use a different phone number."
+          });
+        }
+      }
     }
 
     // Ensure country field is included in the update
@@ -125,14 +160,14 @@ export const updateUserProfile = async (req, res) => {
       userId: userId,
       email: userEmail,
       ...profileData,
+      phone: cleanedPhone, // Use cleaned phone number
       updatedAt: new Date(),
       // Make sure these fields are explicitly included
       country: profileData.country || "",
       state: profileData.state || "",
       city: profileData.city || "",
       zipCode: profileData.zipCode || "",
-      countryCode: profileData.countryCode || "+91",
-      phone: profileData.phone || ""
+      countryCode: profileData.countryCode || "+91"
     };
 
     // Update or create UserProfile
@@ -219,9 +254,10 @@ export const uploadProfileImage = async (req, res) => {
 export const updatePhoneNumber = async (req, res) => {
   try {
     const userId = req.user?.userId || req.user?._id
+    const userEmail = req.user?.email
     const { phone, countryCode } = req.body
 
-    if (!userId) {
+    if (!userId || !userEmail) {
       return res.status(401).json({ error: "Authentication required" })
     }
 
@@ -231,6 +267,42 @@ export const updatePhoneNumber = async (req, res) => {
 
     // Ensure phone number is stored correctly without any formatting issues
     const cleanedPhone = phone.replace(/\s+/g, '').replace(/[-+()]/g, '');
+    const fullPhoneNumber = `${countryCode}${cleanedPhone}`;
+
+    // Check for duplicate phone numbers
+    console.log(`[PHONE UPDATE] Checking for duplicates: ${fullPhoneNumber} for user ${userEmail}`);
+    
+    // Check in PhoneUser collection
+    const existingPhoneUser = await PhoneUser.findOne({ 
+      phoneNumber: fullPhoneNumber,
+      email: { $ne: userEmail } // Exclude current user's email
+    });
+    
+    // Check in User collection
+    const existingUser = await User.findOne({ 
+      $or: [
+        { phone: fullPhoneNumber },
+        { phoneNumber: fullPhoneNumber }
+      ],
+      email: { $ne: userEmail } // Exclude current user's email
+    });
+    
+    // Check in UserProfile collection
+    const existingUserProfile = await UserProfile.findOne({ 
+      phone: cleanedPhone,
+      email: { $ne: userEmail } // Exclude current user's email
+    });
+    
+    if (existingPhoneUser || existingUser || existingUserProfile) {
+      console.log(`[PHONE UPDATE] Duplicate found for ${fullPhoneNumber}`);
+      return res.status(400).json({
+        success: false,
+        error: "Phone number already registered",
+        message: "This phone number is already associated with another account. Please use a different phone number."
+      });
+    }
+
+    console.log(`[PHONE UPDATE] No duplicates found, updating phone for user ${userEmail}`);
 
     // Update profile with new phone number
     const updatedProfile = await UserProfile.findOneAndUpdate(
@@ -245,6 +317,8 @@ export const updatePhoneNumber = async (req, res) => {
         new: true,
       }
     )
+
+    console.log(`[PHONE UPDATE] Phone updated successfully for user ${userEmail}`);
 
     return res.status(200).json({
       success: true,
@@ -264,6 +338,7 @@ export const updatePhoneNumber = async (req, res) => {
 export const checkPhoneExists = async (req, res) => {
   try {
     const { phoneNumber } = req.query;
+    const currentUserEmail = req.user?.email; // Get current user's email if authenticated
     
     if (!phoneNumber) {
       return res.status(400).json({
@@ -272,10 +347,16 @@ export const checkPhoneExists = async (req, res) => {
       });
     }
     
-    console.log(`[PHONE CHECK] Checking if phone number exists: ${phoneNumber}`);
+    console.log(`[PHONE CHECK] Checking if phone number exists: ${phoneNumber} (excluding user: ${currentUserEmail || 'anonymous'})`);
+    
+    // Build query to exclude current user if authenticated
+    const excludeCurrentUser = currentUserEmail ? { email: { $ne: currentUserEmail } } : {};
     
     // Check in PhoneUser collection
-    const phoneUser = await PhoneUser.findOne({ phoneNumber });
+    const phoneUser = await PhoneUser.findOne({ 
+      phoneNumber,
+      ...excludeCurrentUser
+    });
     
     // Also check if another regular user has this phone number
     // Look in both phone and phoneNumber fields for maximum compatibility
@@ -283,19 +364,26 @@ export const checkPhoneExists = async (req, res) => {
       $or: [
         { phone: phoneNumber },
         { phoneNumber: phoneNumber }
-      ] 
+      ],
+      ...excludeCurrentUser
     });
     
-    const userProfile = await UserProfile.findOne({ phone: phoneNumber });
+    // Check in UserProfile collection (extract just the phone number part)
+    const phoneOnly = phoneNumber.replace(/^\+\d{1,3}/, ''); // Remove country code
+    const userProfile = await UserProfile.findOne({ 
+      phone: phoneOnly,
+      ...excludeCurrentUser
+    });
     
     const exists = !!phoneUser || !!regularUser || !!userProfile;
     
-    console.log(`[PHONE CHECK] Phone ${phoneNumber} exists: ${exists}`);
+    console.log(`[PHONE CHECK] Phone ${phoneNumber} exists (excluding current user): ${exists}`);
     
     // Return whether the phone exists or not
     res.status(200).json({
       success: true,
       exists: exists,
+      message: exists ? 'Phone number is already registered with another account' : 'Phone number is available'
       // Don't include user details for security reasons
     });
   } catch (error) {

@@ -311,6 +311,10 @@ function startHttpServer() {
   });
 }
 
+app.get("/check",(req,res)=>{
+  res.json("this is luxor backend api working fine ");
+})
+
 // Function to automatically expire bookings periodically
 function startBookingExpiryScheduler() {
   // Run immediately on server start

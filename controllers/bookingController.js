@@ -16,7 +16,7 @@ export const createBooking = async (req, res) => {
     const { 
       villaId, email, guestName, checkIn, checkOut, checkInTime, checkOutTime, 
       guests, totalAmount, totalDays, infants, address, 
-      isPaid, paymentId, orderId // Add payment fields
+      isPaid, paymentId, orderId, paymentMethod // Add payment method to destructuring
     } = req.body
 
     if (!villaId || !email || !checkIn || !checkOut || !guests) {
@@ -114,7 +114,8 @@ export const createBooking = async (req, res) => {
       // Add payment details
       isPaid: isPaid || false,
       paymentId: paymentId || null,
-      orderId: orderId || null
+      orderId: orderId || null,
+      paymentMethod: paymentMethod || 'Pay at Hotel' // Set payment method with fallback
     })
 
     console.log("[BOOKING] Booking created successfully:", {

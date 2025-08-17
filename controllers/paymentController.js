@@ -187,6 +187,7 @@ export const createOrder = async (req, res) => {
 };
 
 // Verify Razorpay payment and create booking
+// This function also captures the actual payment method used (UPI, Net Banking, Cards, etc.)
 export const verifyPayment = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -262,12 +263,52 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
+    // Fetch payment details from Razorpay to get payment method
+    let paymentMethod = 'Pay at Hotel'; // Default fallback
+    try {
+      const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
+      console.log('[PAYMENT] Fetched payment details:', {
+        method: paymentDetails.method,
+        bank: paymentDetails.bank,
+        wallet: paymentDetails.wallet,
+        vpa: paymentDetails.vpa,
+        upi: paymentDetails.upi
+      });
+      
+      // Map Razorpay payment methods to user-friendly names
+      switch (paymentDetails.method) {
+        case 'upi':
+          paymentMethod = 'UPI';
+          break;
+        case 'netbanking':
+          paymentMethod = 'Net Banking';
+          break;
+        case 'card':
+          paymentMethod = 'Credit/Debit Card';
+          break;
+        case 'wallet':
+          paymentMethod = paymentDetails.wallet ? `${paymentDetails.wallet} Wallet` : 'Digital Wallet';
+          break;
+        case 'bank_transfer':
+          paymentMethod = 'Bank Transfer';
+          break;
+        default:
+          paymentMethod = 'Online Payment';
+      }
+      
+      console.log('[PAYMENT] Mapped payment method:', paymentMethod);
+    } catch (paymentFetchError) {
+      console.warn('[PAYMENT] Could not fetch payment details from Razorpay:', paymentFetchError.message);
+      // Continue with default payment method
+    }
+
     // Update booking with payment details
     booking.paymentId = razorpay_payment_id;
     booking.orderId = razorpay_order_id;
     booking.isPaid = true;
     booking.status = 'confirmed';
     booking.paymentStatus = 'paid';
+    booking.paymentMethod = paymentMethod; // Set the actual payment method
     booking.paymentDate = new Date();
     
     // Save the updated booking with the session
@@ -281,7 +322,8 @@ export const verifyPayment = async (req, res) => {
       bookingId: updatedBooking._id,
       paymentId: updatedBooking.paymentId,
       orderId: updatedBooking.orderId,
-      status: updatedBooking.status
+      status: updatedBooking.status,
+      paymentMethod: updatedBooking.paymentMethod
     });
 
     // Fetch the associated villa to pass to the confirmation email
