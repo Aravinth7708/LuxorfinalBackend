@@ -554,13 +554,18 @@ async function sendBookingConfirmation(booking) {
             <h3 style="margin-top: 0;">Price Details</h3>
             
             <div class="price-row">
-              <div class="booking-label">Villa Price</div>
-              <div class="booking-value">₹${Math.round(booking.totalAmount * 0.8).toLocaleString()}</div>
+              <div class="booking-label">Villa Price (${booking.totalDays || 1} nights)</div>
+              <div class="booking-value">₹${Math.round(booking.totalAmount / 1.239).toLocaleString()}</div>
             </div>
             
             <div class="price-row">
-              <div class="booking-label">Taxes & Fees</div>
-              <div class="booking-value">₹${Math.round(booking.totalAmount * 0.2).toLocaleString()}</div>
+              <div class="booking-label">Service Fee (5%)</div>
+              <div class="booking-value">₹${Math.round((booking.totalAmount / 1.239) * 0.05).toLocaleString()}</div>
+            </div>
+            
+            <div class="price-row">
+              <div class="booking-label">Taxes (18%)</div>
+              <div class="booking-value">₹${Math.round(((booking.totalAmount / 1.239) + (booking.totalAmount / 1.239) * 0.05) * 0.18).toLocaleString()}</div>
             </div>
             
             <div class="price-row price-total">
@@ -627,9 +632,14 @@ async function generateBookingTicketPDF(booking, villa, formattedCheckIn, format
       // Calculate nights
       const totalNights = booking.totalDays || Math.ceil((new Date(booking.checkOut) - new Date(booking.checkIn)) / (1000 * 60 * 60 * 24));
       
-      // Calculate financial details
-      const basePrice = Math.round(booking.totalAmount * 0.8);
-      const taxesAndFees = Math.round(booking.totalAmount * 0.2);
+      // Calculate financial details - FIXED CALCULATION
+      // Formula: totalAmount = basePrice + serviceFee + taxAmount
+      // Where: serviceFee = basePrice * 0.05, taxAmount = (basePrice + serviceFee) * 0.18
+      // Solving: totalAmount = basePrice * 1.239
+      // Therefore: basePrice = totalAmount / 1.239
+      const basePrice = Math.round(booking.totalAmount / 1.239);
+      const serviceFee = Math.round(basePrice * 0.05);
+      const taxAmount = Math.round((basePrice + serviceFee) * 0.18);
       const totalAmount = booking.totalAmount;
 
       // -------- HEADER SECTION --------
@@ -926,18 +936,18 @@ async function generateBookingTicketPDF(booking, villa, formattedCheckIn, format
       doc.font("Helvetica")
          .fontSize(12)
          .fillColor("#111827")
-         .text(`₹${Math.round(booking.totalAmount * 0.05)}`, doc.page.width - 60, paymentY + 25, { align: "right" });
+         .text(`₹${serviceFee}`, doc.page.width - 60, paymentY + 25, { align: "right" });
       
       // Taxes
       doc.font("Helvetica")
          .fontSize(12)
          .fillColor("#6b7280")
-         .text("Taxes (15%)", 50, paymentY + 50);
+         .text("Taxes (18%)", 50, paymentY + 50);
       
       doc.font("Helvetica")
          .fontSize(12)
          .fillColor("#111827")
-         .text(`₹${taxesAndFees - Math.round(booking.totalAmount * 0.05)}`, doc.page.width - 60, paymentY + 50, { align: "right" });
+         .text(`₹${taxAmount}`, doc.page.width - 60, paymentY + 50, { align: "right" });
       
       // Line before total
       doc.moveTo(50, paymentY + 75).lineTo(doc.page.width - 40, paymentY + 75).strokeColor("#e5e7eb").stroke();
