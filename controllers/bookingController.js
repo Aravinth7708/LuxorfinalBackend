@@ -633,12 +633,15 @@ export const checkAvailability = async (req, res) => {
 
     // Find all blocked dates for this villa
     const blockedDates = await BlockedDate.find({
-      villa: villaId,
-      isDeleted: false,
+      villaId: villaId,
+      isActive: true,
       endDate: { $gte: new Date() } // Only future or current blocked dates
     }).select('startDate endDate reason category');
 
     console.log(`[BOOKING] Found ${blockedDates.length} blocked date ranges for villa ${villaId}`);
+    if (blockedDates.length > 0) {
+      console.log('[BOOKING] Blocked dates details:', blockedDates);
+    }
 
     // Format the blocked dates from bookings for response
     const bookingBlockedDates = bookings.map(booking => ({
@@ -700,10 +703,15 @@ export const getBlockedDates = async (req, res) => {
 
     // Get admin-blocked dates
     const adminBlockedDates = await BlockedDate.find({
-      villa: villaId,
-      isDeleted: false,
+      villaId: villaId,
+      isActive: true,
       endDate: { $gte: new Date() } // Only future or current blocked dates
     }).select('startDate endDate reason category');
+
+    console.log(`[BOOKING] Found ${adminBlockedDates.length} admin blocked dates for villa ${villaId}`);
+    if (adminBlockedDates.length > 0) {
+      console.log('[BOOKING] Admin blocked dates:', adminBlockedDates);
+    }
 
     // Convert bookings to blocked date format
     const bookingBlockedDates = bookings.map((booking) => ({
@@ -723,6 +731,9 @@ export const getBlockedDates = async (req, res) => {
 
     // Combine both types of blocked dates
     const allBlockedDates = [...bookingBlockedDates, ...adminBlockedDatesFormatted];
+
+    console.log(`[BOOKING] Returning ${allBlockedDates.length} total blocked dates (${bookingBlockedDates.length} from bookings, ${adminBlockedDatesFormatted.length} from admin)`);
+    console.log('[BOOKING] All blocked dates:', JSON.stringify(allBlockedDates, null, 2));
 
     res.status(200).json({ blockedDates: allBlockedDates })
   } catch (err) {
